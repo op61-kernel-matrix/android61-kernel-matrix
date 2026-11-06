@@ -49,7 +49,10 @@ jobs:
         run: |
           set -euo pipefail
           test -f configs/oos16/OP13r-6.1.141.json
-          JSON=$(jq -c '.uname="NOSTALGIC" | .susfs=true' configs/oos16/OP13r-6.1.141.json)
+          # Preserve the stock OnePlus release suffix from the reviewed config.
+          # NostalgiKSU identifies itself through its ABI/version markers, not
+          # by changing kernel.release (which would break vendor vermagic).
+          JSON=$(jq -c '.susfs=true' configs/oos16/OP13r-6.1.141.json)
           printf 'json=%s\n' "$JSON" >> "$GITHUB_OUTPUT"
 
       - name: Build OP13R kernel
