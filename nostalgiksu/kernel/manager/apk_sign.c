@@ -61,7 +61,7 @@ static apk_sign_key_t apk_sign_keys[] = {
     { 0x3e6, "79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7", 0, "KernelSU-Next" },
 #endif
 #if (KSU_PRESET_MANAGER_MASK & 0x08)
-    { 0x377, "d3469712b6214462764a1d8d3e5cbe1d6819a0b629791b9f4101867821f1df64", 0, "ReSukiSU" },
+    { 0x377, "d3469712b6214462764a1d8d3e5cbe1d6819a0b629791b9f4101867821f1df64", 0, "NostalgiKSU" },
 #endif
 #if (KSU_PRESET_MANAGER_MASK & 0x10)
     { 0x35c, "947ae944f3de4ed4c21a7e4f7953ecf351bfa2b36239da37a34111ad29993eef", 0, "SukiSU" },

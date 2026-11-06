@@ -2726,7 +2726,7 @@ runs:
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
           grep -qF '33168' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33168 marker missing"; exit 1; }
           grep -qF 'v1.4.5-33168-1389d796@ci' "$IMAGE_STRINGS" || { echo "::error::Final NostalgiKSU source marker missing"; exit 1; }
-          if grep -qiE 'OP-BAKASU|huangdihd' "$IMAGE_STRINGS"; then
+          if grep -qiE 'OP-BAKASU|huangdihd|ReSukiSU' "$IMAGE_STRINGS"; then
             echo "::error::Foreign visible kernel branding found in Image"
             exit 1
           fi
