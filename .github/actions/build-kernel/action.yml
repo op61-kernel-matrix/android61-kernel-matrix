@@ -2800,12 +2800,57 @@ runs:
             footer = Path(os.environ["GITHUB_ACTION_PATH"], "nostalgic-anykernel-footer.sh").read_text().splitlines()
             lines[start:] = footer
 
+        # ksud may launch update-binary with its own AKHOME. Derive all AK3
+        # paths from the directory that update-binary extracted and entered.
+        core_import = ". tools/ak3-core.sh"
+        try:
+            core_index = lines.index(core_import)
+        except ValueError:
+            raise SystemExit("AnyKernel core import was not found")
+        lines[core_index:core_index] = [
+            'AKHOME="$(pwd -P)"',
+            'export AKHOME',
+        ]
+
+        # no_magisk_check=1 skips detection, so initialize the numeric value
+        # still consumed by the inherited AK3 flash path.
+        try:
+            split_index = lines.index("split_boot")
+        except ValueError:
+            raise SystemExit("split_boot call was not found")
+        lines.insert(split_index, "magisk_patched=0")
+
         path.write_text("\n".join(lines) + "\n")
+        PY
+
+        # Do not continue after a broken working directory. Older AK3 cores can
+        # otherwise print Done after repacking from the wrong directory.
+        python3 - <<'PY'
+        from pathlib import Path
+
+        path = Path("tools/ak3-core.sh")
+        text = path.read_text()
+        text = text.replace(
+            "  mkdir -p $SPLITIMG;\n  cd $SPLITIMG;",
+            '  mkdir -p "$SPLITIMG" || abort "Unable to create AnyKernel split directory. Aborting...";\n'
+            '  cd "$SPLITIMG" || abort "Unable to enter AnyKernel split directory. Aborting...";',
+        )
+        text = text.replace(
+            "  cd $SPLITIMG;",
+            '  cd "$SPLITIMG" || abort "Unable to enter AnyKernel split directory. Aborting...";',
+        )
+        text = text.replace(
+            "  cd $AKHOME;",
+            '  cd "$AKHOME" || abort "Unable to enter AnyKernel working directory. Aborting...";',
+        )
+        path.write_text(text)
         PY
         
         sed -i 's/do.check_boot_version=.*/do.check_boot_version=1/' anykernel.sh
 
-        if [ "${{ inputs.ksu_type }}" = "BakaSU" ]; then
+        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
+          cp "$GITHUB_ACTION_PATH/assets/nostalgiksu-banner" banner
+        elif [ "${{ inputs.ksu_type }}" = "BakaSU" ]; then
           cp "$GITHUB_ACTION_PATH/assets/bakasu-banner" banner
         fi
 
