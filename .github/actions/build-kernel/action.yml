@@ -1021,26 +1021,26 @@ runs:
         echo "✅ BakaSU added (commit: ${KSU_COMMIT_SHA:0:8})"
         echo "::endgroup::"
 
-    - name: Add NostalgiKSU 35257
+    - name: Add finalized NostalgiKSU 33168
       shell: bash
       if: ${{ inputs.ksu_type == 'NostalgiKSU' }}
       run: |
         set -euo pipefail
-        echo "::group::Add NostalgiKSU 35257"
+        echo "::group::Add finalized NostalgiKSU 33168"
         cd "$KERNEL_PLATFORM_FOLDER"
         rm -rf KernelSU
-        git init -q KernelSU
-        git -C KernelSU remote add origin https://github.com/ReSukiSU/ReSukiSU.git
-        git -C KernelSU fetch --depth=1 origin "${{ inputs.ksu_branch_or_hash }}"
-        git -C KernelSU checkout --detach FETCH_HEAD
-        KSU_COMMIT_SHA=$(git -C KernelSU rev-parse HEAD)
-        test "$KSU_COMMIT_SHA" = "${{ inputs.ksu_branch_or_hash }}"
+        mkdir -p KernelSU
+        cp -a "$GITHUB_WORKSPACE/nostalgiksu/kernel" KernelSU/kernel
+        cp -a "$GITHUB_WORKSPACE/nostalgiksu/uapi" KernelSU/uapi
+        test -f KernelSU/kernel/supercall/dispatch.c
+        test -f KernelSU/kernel/extension/susfs.c
+        test -L KernelSU/kernel/include/uapi
 
-        # ReSukiSU 35257 is the requested NostalgiKSU core. Keep the exact
-        # reviewed source commit while making its compiled identity explicit.
-        sed -i 's/^REPO_NAME :=.*/REPO_NAME := NostalgiKSU/' KernelSU/kernel/Kbuild
-        sed -i 's/^$(shell cd $(KSU_SRC); \[ -f ..\/.git\/shallow \].*)/# shallow source intentionally pinned by CI/' KernelSU/kernel/Kbuild
-        sed -i 's/^KSU_LOCAL_VERSION :=.*/KSU_LOCAL_VERSION := 4557/' KernelSU/kernel/Kbuild
+        # Pin the exact kernel ABI shipped by the run-32 manager.  The public
+        # matrix repository vendors commit 1389d79617 from the finalized app
+        # tree, so CI never substitutes a renamed foreign KernelSU fork.
+        sed -i '1i KSU_VERSION_FULL_OVERRIDE := v1.4.5-33168-1389d796@ci\nKSU_VERSION_OVERRIDE := 33168' KernelSU/kernel/Kbuild
+        KSU_COMMIT_SHA=1389d79617a91038a03883a5d6b91dfa7957f5d6
 
         DRIVER_DIR="$COMMON_KERNEL_FOLDER/drivers"
         ln -sfn "$(realpath --relative-to="$DRIVER_DIR" "$KERNEL_PLATFORM_FOLDER/KernelSU/kernel")" "$DRIVER_DIR/kernelsu"
@@ -1048,13 +1048,15 @@ runs:
         grep -q 'source "drivers/kernelsu/Kconfig"' "$DRIVER_DIR/Kconfig" || sed -i '/endmenu/i\source "drivers/kernelsu/Kconfig"' "$DRIVER_DIR/Kconfig"
         cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<'EOF'
         CONFIG_KSU=y
-        CONFIG_KSU_FULL_NAME_FORMAT="NostalgiKSU-35257-6"
+        CONFIG_KALLSYMS=y
+        CONFIG_KALLSYMS_ALL=y
+        CONFIG_THREAD_INFO_IN_TASK=y
         EOF
 
         echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> "$GITHUB_ENV"
-        echo "KSUVER=35257" >> "$GITHUB_ENV"
+        echo "KSUVER=33168" >> "$GITHUB_ENV"
         echo "NostalgiKSU" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
-        echo "35257" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
+        echo "33168" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
         echo "NostalgiKSU source: $KSU_COMMIT_SHA"
         echo "::endgroup::"
 
@@ -1493,6 +1495,8 @@ runs:
         CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
         CONFIG_KSU_SUSFS_SUS_MAP=y
         CONFIG_KSU_SUSFS_SUS_SU=n
+        CONFIG_KSU_HOOK_TRACEPOINT=n
+        CONFIG_KSU_HOOK_SUSFS_INLINE=y
         EOF
         
         echo "::endgroup::"
@@ -2308,12 +2312,10 @@ runs:
         echo "Customize Kernel Branding"
         cd "$COMMON_KERNEL_FOLDER"
         mkdir -p out
-        # A stock-shaped uname value must remain stock-shaped. Appending the
-        # workflow actor would both break that shape and expose build metadata.
-        # Named community builds retain the historical actor suffix.
-        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC"
-        elif [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
+        # Keep the exact stock-shaped release string so OnePlus vendor modules
+        # retain their expected vermagic/KMI contract. NostalgiKSU identity is
+        # reported through its own ABI, never by mutating kernel.release.
+        if [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
           CUSTOM_LOCALVERSION="-${ANDROID_VER}-${OP_UNAME}"
         else
           CUSTOM_LOCALVERSION="-${ANDROID_VER}-${OP_UNAME}-${{ github.actor }}"
@@ -2685,8 +2687,8 @@ runs:
         echo "Kernel Uname: $KERNEL_UNAME"
         echo "KERNEL_UNAME=$KERNEL_UNAME" >> "$GITHUB_ENV"
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          grep -q '6\.1\.141-android14-NOSTALGIC' <<<"$KERNEL_UNAME" || {
-            echo "::error::Unexpected NOSTALGIC kernel uname: $KERNEL_UNAME"
+          grep -q '6\.1\.141-android14-8-g88433133-ab68376540' <<<"$KERNEL_UNAME" || {
+            echo "::error::Unexpected stock kernel uname: $KERNEL_UNAME"
             exit 1
           }
           if grep -qiE 'resusfs|bakasu|huangdihd|pilot' <<<"$KERNEL_UNAME"; then
@@ -2722,9 +2724,8 @@ runs:
           done
         fi
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          grep -qF '35257' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 35257 marker missing"; exit 1; }
-          grep -qF 'NostalgiKSU' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU identity marker missing"; exit 1; }
-          grep -qF 'android14-NOSTALGIC' "$IMAGE_STRINGS" || { echo "::error::NOSTALGIC uname marker missing"; exit 1; }
+          grep -qF '33168' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33168 marker missing"; exit 1; }
+          grep -qF 'v1.4.5-33168-1389d796@ci' "$IMAGE_STRINGS" || { echo "::error::Final NostalgiKSU source marker missing"; exit 1; }
           if grep -qiE 'OP-BAKASU|huangdihd' "$IMAGE_STRINGS"; then
             echo "::error::Foreign visible kernel branding found in Image"
             exit 1
@@ -2822,7 +2823,7 @@ runs:
         # they resolved to the same full kernel version.
         ZIP_MODEL="$OP_MODEL"
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          ZIP_NAME="NOSTALGIC-AK3_OP13r_OOS16_android14-6.1.141_NKSU_35257_SuSFS_v2.3.0.zip"
+          ZIP_NAME="NOSTALGIC-AK3_OP13r_OOS16_android14-6.1.141_NKSU_33168_SuSFS_v2.3.0.zip"
         elif [ "${{ env.OP_SUSFS }}" = true ]; then
           ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_${{ inputs.ksu_type }}_${KSUVER:-unknown}_SuSFS_${SUSVER:-unknown}.zip"
         else
