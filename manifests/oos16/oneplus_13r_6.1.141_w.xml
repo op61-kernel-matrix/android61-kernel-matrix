@@ -5,14 +5,16 @@
   <remote fetch="https://github.com/OnePlusOSS" name="origin"/>
   <remote fetch="https://github.com/huangdihd" name="wild"/>
   <project remote="wild" name="AnyKernel3" path="AnyKernel3" revision="gki-2.0"/>
-  <project remote="origin" name="android_kernel_common_oneplus_sm8650" path="kernel_platform/common" revision="oneplus/sm8650_b_16.0.0_oneplus_13r">
+  <!-- OnePlus 16.0.5.701 release set: keep all three source projects on the
+       coordinated 6.1.141 snapshot instead of following the moving branch. -->
+  <project remote="origin" name="android_kernel_common_oneplus_sm8650" path="kernel_platform/common" revision="cce121851ca0d7d383b11122776901ef74f3af03">
     <linkfile dest="kernel_platform/.source_date_epoch_dir" src="."/>
   </project>
-  <project remote="origin" name="android_kernel_oneplus_sm8650" path="kernel_platform/msm-kernel" revision="oneplus/sm8650_b_16.0.0_oneplus_13r">
+  <project remote="origin" name="android_kernel_oneplus_sm8650" path="kernel_platform/msm-kernel" revision="050f9fdb572947c568ea0a1ad327d0e4c22da94f">
     <linkfile dest="kernel_platform/WORKSPACE" src="bazel.WORKSPACE"/>
     <linkfile dest="kernel_platform/build_with_bazel.py" src="build_with_bazel.py"/>
   </project>
-  <project remote="origin" name="android_kernel_modules_and_devicetree_oneplus_sm8650" path="./" revision="oneplus/sm8650_b_16.0.0_oneplus_13r"/>
+  <project remote="origin" name="android_kernel_modules_and_devicetree_oneplus_sm8650" path="./" revision="794b47d09d11c3a965333dad92f0379a0c4b23ac"/>
   <project remote="clo-la" name="kernel/prebuilts/build-tools" path="kernel_platform/prebuilts/kernel-build-tools" revision="d153b7ab4a4956198957e258d4f370e875c53059" upstream="refs/heads/ks-kernel.lnx.3.0.r1-rel" clone-depth="1">
     <linkfile dest="kernel_platform/build/prebuilts/kernel-build-tools" src="."/>
   </project>
