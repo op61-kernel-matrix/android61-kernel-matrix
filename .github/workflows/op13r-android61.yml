@@ -85,4 +85,6 @@ jobs:
           unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'AKHOME="$(pwd -P)"'
           unzip -p "$ZIP_PATH" anykernel.sh | grep -q '^magisk_patched=0$'
           ! unzip -p "$ZIP_PATH" banner | grep -qi 'resuki'
+          unzip -p "$ZIP_PATH" tools/ak3-core.sh | grep -Fq 'mkdir "$SPLITIMG" || abort'
+          ! unzip -p "$ZIP_PATH" tools/ak3-core.sh | grep -Fq 'mkdir -p "$SPLITIMG"'
           ! unzip -p "$ZIP_PATH" anykernel.sh | grep -qiE 'huangdihd|bakasu|resusfs|nomount'

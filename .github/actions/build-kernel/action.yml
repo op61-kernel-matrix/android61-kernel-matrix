@@ -2832,7 +2832,9 @@ runs:
         text = path.read_text()
         text = text.replace(
             "  mkdir -p $SPLITIMG;\n  cd $SPLITIMG;",
-            '  mkdir -p "$SPLITIMG" || abort "Unable to create AnyKernel split directory. Aborting...";\n'
+            '  if [ ! -d "$SPLITIMG" ]; then\n'
+            '    mkdir "$SPLITIMG" || abort "Unable to create AnyKernel split directory. Aborting...";\n'
+            '  fi;\n'
             '  cd "$SPLITIMG" || abort "Unable to enter AnyKernel split directory. Aborting...";',
         )
         text = text.replace(
