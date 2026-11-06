@@ -1039,7 +1039,7 @@ runs:
         # Pin the exact kernel ABI shipped by the run-32 manager.  The public
         # matrix repository vendors commit 1389d79617 from the finalized app
         # tree, so CI never substitutes a renamed foreign KernelSU fork.
-        sed -i '1i KSU_VERSION_FULL_OVERRIDE := v1.4.5-33168-1389d796@ci\nKSU_VERSION_OVERRIDE := 33168' KernelSU/kernel/Kbuild
+        sed -i '1i FINASU_TRUSTED_SIZE := 0x515\nFINASU_TRUSTED_HASH := ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456\nKSU_VERSION_FULL_OVERRIDE := v1.4.5-33168-1389d796@ci\nKSU_VERSION_OVERRIDE := 33168' KernelSU/kernel/Kbuild
         KSU_COMMIT_SHA=1389d79617a91038a03883a5d6b91dfa7957f5d6
 
         DRIVER_DIR="$COMMON_KERNEL_FOLDER/drivers"
@@ -2726,6 +2726,7 @@ runs:
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
           grep -qF '33168' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33168 marker missing"; exit 1; }
           grep -qF 'v1.4.5-33168-1389d796@ci' "$IMAGE_STRINGS" || { echo "::error::Final NostalgiKSU source marker missing"; exit 1; }
+          grep -qF 'ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456' "$IMAGE_STRINGS" || { echo "::error::Final run-33 manager certificate missing"; exit 1; }
           if grep -qiE 'OP-BAKASU|huangdihd|ReSukiSU' "$IMAGE_STRINGS"; then
             echo "::error::Foreign visible kernel branding found in Image"
             exit 1
