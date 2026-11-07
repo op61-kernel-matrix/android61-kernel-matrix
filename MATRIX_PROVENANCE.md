@@ -52,3 +52,17 @@ All matrix builds use `clean: false`, GitHub Actions ccache/LTO caches, and a
 portable ccache artifact capped at 2 GiB per successful target. The portable
 archive and metadata are intended for later download and extraction into the
 local Gitea runner's ccache directory.
+
+## Android 5.10 family pin
+
+The Android 12 GKI 5.10 matrix uses the family-specific SuSFS revision recorded
+by the same proven WildKernels `v2.2.0-r4` release:
+
+- Kernel family: `android12-5.10`
+- SuSFS commit: `3c14ad549f826b1f53878ec8c12253efebeed75a`
+- Required patch: `kernel_patches/50_add_susfs_in_gki-android12-5.10.patch`
+
+The Android 6.1 SuSFS revision must not be reused for 5.10. The build action
+now verifies that the selected family patch exists and is non-empty before it
+touches the kernel tree, preventing a missing patch from surfacing later as a
+misleading inline-hook compilation failure.

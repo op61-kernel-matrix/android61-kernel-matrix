@@ -116,7 +116,7 @@ jobs:
           op_config_json: ${{ steps.config.outputs.json }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           ksu_type: NostalgiKSU
-          susfs_commit_hash_or_branch: ee155a1ad4219804a7c54cb39dd4fa1b5c2a3fa4
+          susfs_commit_hash_or_branch: 3c14ad549f826b1f53878ec8c12253efebeed75a
           optimize_level: O2
           clean: false
           debug: ${{ inputs.debug }}
@@ -173,7 +173,7 @@ jobs:
             "clean_build": false,
             "ksu": "NostalgiKSU 33168",
             "kernel_build": "v1.4.5-33168-1389d796@ci",
-            "susfs_commit": "ee155a1ad4219804a7c54cb39dd4fa1b5c2a3fa4"
+            "susfs_commit": "3c14ad549f826b1f53878ec8c12253efebeed75a"
           }
           EOF
           tar --zstd -cf "portable-cache/${CACHE_NAME}.tar.zst" -C /tmp ccache

@@ -1209,9 +1209,16 @@ runs:
           fi
         fi
         
-        echo "Applying SUSFS patch..."
+        SUSFS_KERNEL_PATCH="$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch"
+        if [ ! -s "$SUSFS_KERNEL_PATCH" ]; then
+          echo "::error::Required SUSFS kernel patch is missing: $SUSFS_KERNEL_PATCH"
+          echo "::error::Resolved SUSFS ref: ${SUSFS_COMMIT_SHA:-unknown}; kernel family: ${{ env.SUSFS_KERNEL_BRANCH }}"
+          exit 1
+        fi
+
+        echo "Applying SUSFS patch: $SUSFS_KERNEL_PATCH"
         # Attempt to apply the patch; enter error handling if it doesn't apply cleanly
-        if ! patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch"; then
+        if ! patch -p1 --forward < "$SUSFS_KERNEL_PATCH"; then
           echo "Patch reported errors. Checking for known mm/memory.c Hunk #1 context mismatch..."
           
           # If mm/memory.c.rej exists and is caused by the SUSFS macro insertion failure
