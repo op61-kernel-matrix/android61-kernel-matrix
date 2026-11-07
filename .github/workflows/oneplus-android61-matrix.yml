@@ -115,21 +115,26 @@ jobs:
           ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$ZIP_PATH"
           [[ "$ZIP_NAME" == NOSTALGIC-AK3_*_NKSU_33168_SuSFS_v2.3.0.zip ]]
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -q '^block=boot$'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -q '^is_slot_device=auto$'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -q '^split_boot$'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq '  -> OKI Kernel Supported: $ksu_supported'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -q 'Core stack: NostalgiKSU 33168 + NOSTALGIC SuSFS 2.3.0 GKI-2'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'ui_print "NostalgiKSU"'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'ui_print "NOSTALGIC Kernel Lab"'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'Built with love by NOSTALGIC @Reals3s'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'Credits: OnePlus OSS, NostalgiKSU contributors and AnyKernel3.'
-          [ "$(unzip -p "$ZIP_PATH" banner | tr -d '\r\n')" = 'NostalgiKSU' ]
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'AKHOME="$(pwd -P)"'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -q '^magisk_patched=0$'
-          unzip -p "$ZIP_PATH" tools/ak3-core.sh | grep -Fq 'mkdir "$SPLITIMG" || abort'
-          ! unzip -p "$ZIP_PATH" tools/ak3-core.sh | grep -Fq 'mkdir -p "$SPLITIMG"'
-          ! unzip -p "$ZIP_PATH" anykernel.sh | grep -qiE 'huangdihd|bakasu|resusfs|nomount|resuki'
+          VERIFY_DIR=$(mktemp -d)
+          trap 'rm -rf "$VERIFY_DIR"' EXIT
+          unzip -p "$ZIP_PATH" anykernel.sh > "$VERIFY_DIR/anykernel.sh"
+          unzip -p "$ZIP_PATH" tools/ak3-core.sh > "$VERIFY_DIR/ak3-core.sh"
+          unzip -p "$ZIP_PATH" banner > "$VERIFY_DIR/banner"
+          grep -q '^block=boot$' "$VERIFY_DIR/anykernel.sh"
+          grep -q '^is_slot_device=auto$' "$VERIFY_DIR/anykernel.sh"
+          grep -q '^split_boot$' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq '  -> OKI Kernel Supported: $ksu_supported' "$VERIFY_DIR/anykernel.sh"
+          grep -q 'Core stack: NostalgiKSU 33168 + NOSTALGIC SuSFS 2.3.0 GKI-2' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'ui_print "NostalgiKSU"' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'ui_print "NOSTALGIC Kernel Lab"' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'Built with love by NOSTALGIC @Reals3s' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'Credits: OnePlus OSS, NostalgiKSU contributors and AnyKernel3.' "$VERIFY_DIR/anykernel.sh"
+          [ "$(tr -d '\r\n' < "$VERIFY_DIR/banner")" = 'NostalgiKSU' ]
+          grep -Fq 'AKHOME="$(pwd -P)"' "$VERIFY_DIR/anykernel.sh"
+          grep -q '^magisk_patched=0$' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'mkdir "$SPLITIMG" || abort' "$VERIFY_DIR/ak3-core.sh"
+          ! grep -Fq 'mkdir -p "$SPLITIMG"' "$VERIFY_DIR/ak3-core.sh"
+          ! grep -qiE 'huangdihd|bakasu|resusfs|nomount|resuki' "$VERIFY_DIR/anykernel.sh"
 
       - name: Package portable compiler cache
         if: success()
