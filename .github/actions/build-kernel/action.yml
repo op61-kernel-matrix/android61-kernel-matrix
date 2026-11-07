@@ -2810,6 +2810,14 @@ runs:
             footer = Path(os.environ["GITHUB_ACTION_PATH"], "nostalgic-anykernel-footer.sh").read_text().splitlines()
             lines[start:] = footer
 
+        # Match the proven OP13R pilot installer output. Fatal's AK3 base calls
+        # this "Wild Kernels Supported"; NOSTALGIC-AK3 must show the neutral
+        # OKI capability result used by the final pilot.
+        lines = [
+            line.replace("Wild Kernels Supported:", "OKI Kernel Supported:")
+            for line in lines
+        ]
+
         # ksud may launch update-binary with its own AKHOME. Derive all AK3
         # paths from the directory that update-binary extracted and entered.
         core_import = ". tools/ak3-core.sh"
