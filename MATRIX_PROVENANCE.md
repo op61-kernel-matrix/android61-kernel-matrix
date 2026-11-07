@@ -1,4 +1,4 @@
-# OnePlus Android 6.1 Matrix Provenance
+# OnePlus Kernel Matrix Provenance
 
 This repository's first full matrix is derived from the last proven Fatal
 OnePlus release used as the stable base for the earlier large kernel set:
@@ -23,6 +23,24 @@ contract:
 - Nine required SuSFS capability markers
 - Inline hook mode
 - NostalgiKSU-only AnyKernel3 branding and strict installer failure handling
+
+## Authoritative future-build reference
+
+Fatal/WildKernels workflow run `38894819716` is the authoritative source and
+configuration reference for all future matrix families:
+
+- Workflow: `Build and Release OnePlus Kernels` run `#1120`
+- Commit: `d137109`
+- Result: success, 158 of 158 matrix jobs, 158 artifacts
+- OP-ACE-2V reference tuple: `dimensity9000`, `wild/mt6983`,
+  `oneplus_ace2v_w.xml`, `android12`, `5.10`, `A16`, `KSUN`
+
+Its successful device manifests, source branches, toolchains and build flags
+are the baseline. NostalgiKSU overlays must preserve Inline hook mode and
+Seccomp `Filter`; Hybrid hooks and disabled Seccomp are forbidden fallbacks.
+The Fatal/WildKernels installer presentation is not inherited: final packages
+must retain the NOSTALGIC filename, yellow `NostalgiKSU` flashing header,
+OKI-supported line and NOSTALGIC footer contract described below.
 
 Every matrix flashable ZIP must preserve the proven run-8 presentation:
 
