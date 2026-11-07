@@ -4,54 +4,40 @@ inputs:
   op_config_json:
     description: 'JSON string containing full device config'
     required: true
-    type: string
   ksu_type:
     description: 'Select KSU Type'
     required: true
-    type: choice
-    options:
-      - KSU
-      - BakaSU
-      - NostalgiKSU
   ksu_branch_or_hash:
     description: 'KSU branch or commit hash (empty = auto-detect by ksu_type)'
     required: false
-    type: string
     default: ""
   susfs_commit_hash_or_branch:
     description: 'SUSFS branch or commit hash (empty = auto-detect by kernel version)'
     required: false
-    type: string
     default: ""
   use_nomount:
     description: 'Compile the NoMount inline VFS engine into the kernel'
     required: false
-    type: boolean
     default: false
   nomount_ref:
     description: 'NoMount branch or full commit to integrate'
     required: false
-    type: string
     default: dev
   build_timestamp:
     description: 'Custom kernel build timestamp shown in uname -a (e.g. "Tue Feb 10 10:01:02 UTC 2026"). Leave empty to use the current build time.'
     required: false
-    type: string
     default: ''
   optimize_level:
     description: 'Compiler optimization level (O2 or O3)'
     required: false
-    type: string
     default: O2
   clean:
     description: 'Force clean build without ccache acceleration'
     required: false
-    type: boolean
     default: false
   debug:
     description: 'Enable dumping debug related artifacts'
     required: false
-    type: boolean
     default: false
   github_token:
     description: 'GitHub Token'
@@ -2687,10 +2673,25 @@ runs:
         echo "Kernel Uname: $KERNEL_UNAME"
         echo "KERNEL_UNAME=$KERNEL_UNAME" >> "$GITHUB_ENV"
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          grep -q '6\.1\.141-android14-8-g88433133-ab68376540' <<<"$KERNEL_UNAME" || {
-            echo "::error::Unexpected stock kernel uname: $KERNEL_UNAME"
-            exit 1
-          }
+          # Numeric uname suffixes are exact stock contracts (the proven pilot
+          # uses 8-g88433133-ab68376540). Fatal matrix entries intentionally use
+          # OP-WILD, so validate their GKI family without pretending every
+          # device has the pilot's OnePlus build suffix.
+          if [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
+            grep -Fq "${OP_KERNEL_VERSION}-${OP_ANDROID_VERSION}-${OP_UNAME}" <<<"$KERNEL_UNAME" || {
+              echo "::error::Unexpected exact stock kernel uname: $KERNEL_UNAME"
+              exit 1
+            }
+          else
+            grep -Fq "${OP_KERNEL_VERSION}." <<<"$KERNEL_UNAME" || {
+              echo "::error::Unexpected kernel family: $KERNEL_UNAME"
+              exit 1
+            }
+            grep -Fq "$OP_ANDROID_VERSION" <<<"$KERNEL_UNAME" || {
+              echo "::error::Unexpected Android GKI family: $KERNEL_UNAME"
+              exit 1
+            }
+          fi
           if grep -qiE 'resusfs|bakasu|huangdihd|pilot' <<<"$KERNEL_UNAME"; then
             echo "::error::Forbidden foreign branding found in uname: $KERNEL_UNAME"
             exit 1
@@ -2787,7 +2788,13 @@ runs:
         lines = text.splitlines()
         for index, line in enumerate(lines):
             if line.startswith("kernel.string="):
-                lines[index] = "kernel.string=NOSTALGIC Kernel Lab for OnePlus 13R (OOS16 / android14-6.1.141)"
+                model = os.environ["OP_MODEL"]
+                os_version = os.environ["OP_OS_VERSION"]
+                kernel_version = os.environ["KERNEL_FULL_VER"]
+                if model == "OP13r-6.1.141":
+                    lines[index] = "kernel.string=NOSTALGIC Kernel Lab for OnePlus 13R (OOS16 / android14-6.1.141)"
+                else:
+                    lines[index] = f"kernel.string=NOSTALGIC Kernel Lab for {model} ({os_version} / {kernel_version})"
                 break
         else:
             raise SystemExit("kernel.string was not found in anykernel.sh")
@@ -2823,6 +2830,12 @@ runs:
 
         path.write_text("\n".join(lines) + "\n")
         PY
+
+        # The shared footer must identify the current matrix target rather than
+        # retaining the OP13R pilot label.
+        if [ "$OP_MODEL" != "OP13r-6.1.141" ]; then
+          sed -i "s/NOSTALGIC Kernel Lab for OnePlus 13R/NOSTALGIC Kernel Lab for ${OP_MODEL}/" anykernel.sh
+        fi
 
         # Do not continue after a broken working directory. Older AK3 cores can
         # otherwise print Done after repacking from the wrong directory.
@@ -2871,7 +2884,7 @@ runs:
         # they resolved to the same full kernel version.
         ZIP_MODEL="$OP_MODEL"
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          ZIP_NAME="NOSTALGIC-AK3_OP13r_OOS16_android14-6.1.141_NKSU_33168_SuSFS_v2.3.0.zip"
+          ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33168_SuSFS_${SUSVER:-2.3.0}.zip"
         elif [ "${{ env.OP_SUSFS }}" = true ]; then
           ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_${{ inputs.ksu_type }}_${KSUVER:-unknown}_SuSFS_${SUSVER:-unknown}.zip"
         else

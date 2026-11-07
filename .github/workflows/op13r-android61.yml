@@ -73,7 +73,7 @@ jobs:
           ZIP_NAME: ${{ steps.build.outputs.zip_name }}
         run: |
           set -euo pipefail
-          EXPECTED=NOSTALGIC-AK3_OP13r_OOS16_android14-6.1.141_NKSU_33168_SuSFS_v2.3.0.zip
+          EXPECTED=NOSTALGIC-AK3_OP13r-6.1.141_OOS16_android14-6.1.141_NKSU_33168_SuSFS_2.3.0.zip
           test "$ZIP_NAME" = "$EXPECTED"
           ZIP_PATH=$(find . -type f -name "$EXPECTED" -print -quit)
           test -n "$ZIP_PATH"

@@ -1,0 +1,45 @@
+# OnePlus Android 6.1 Matrix Provenance
+
+This repository's first full matrix is derived from the last proven Fatal
+OnePlus release used as the stable base for the earlier large kernel set:
+
+- Repository: `WildKernels/OnePlus_KernelSU_SUSFS`
+- Tag: `v2.2.0-r4`
+- Commit: `d44240312aeb978463b66c3a3155c6d99a7c7a3c`
+- Release workflow/run: `Build and Release OnePlus Kernels` / `31582235180`
+- Original release scope: 158 builds
+- Imported phase: Android 14 GKI 6.1 on OOS 15 and OOS 16
+- Imported matrix size: 50 targets
+
+The Fatal configurations and manifests are the device/source/toolchain base.
+The root stack is deliberately replaced by the proven NostalgiKSU pilot
+contract:
+
+- NostalgiKSU `33168`
+- Kernel identity `v1.4.5-33168-1389d796@ci`
+- Run-33 Manager certificate SHA-256
+  `ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456`
+- SuSFS commit `ee155a1ad4219804a7c54cb39dd4fa1b5c2a3fa4`
+- Nine required SuSFS capability markers
+- Inline hook mode
+- NostalgiKSU-only AnyKernel3 branding and strict installer failure handling
+
+Every matrix flashable ZIP must preserve the proven run-8 presentation:
+
+- Filename begins `NOSTALGIC-AK3_` and ends `SuSFS_2.3.0.zip`.
+- The Manager flashing screen displays the large yellow `NostalgiKSU` header.
+- The installer reports `OKI Kernel Supported: true` before the NOSTALGIC
+  footer on supported 6.1 kernels.
+- The footer uses `NOSTALGIC Kernel Lab`, credits `NOSTALGIC @Reals3s`, reports
+  `NostalgiKSU 33168 + NOSTALGIC SuSFS 2.3.0 GKI-2`, and contains no inherited
+  ReSukiSU, ReSuSFS, BakaSU, Huangdihd, or NoMount branding.
+
+`configs/oos16/OP13r-6.1.141.json` is retained as the proven run-8 pilot and
+replaces the equivalent imported `configs/oos16/OP13r.json` matrix member. The
+latter remains in the repository for source comparison but is excluded by the
+matrix generator. Therefore the dispatched matrix remains exactly 50 builds.
+
+All matrix builds use `clean: false`, GitHub Actions ccache/LTO caches, and a
+portable ccache artifact capped at 2 GiB per successful target. The portable
+archive and metadata are intended for later download and extraction into the
+local Gitea runner's ccache directory.
