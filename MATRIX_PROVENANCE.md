@@ -38,6 +38,15 @@ Every matrix flashable ZIP must preserve the proven run-8 presentation:
 replaces the equivalent imported `configs/oos16/OP13r.json` matrix member. The
 latter remains in the repository for source comparison but is excluded by the
 matrix generator. Therefore the dispatched matrix remains exactly 50 builds.
+Its post-build validation requires the `6.1.*-android14` family and the exact
+stock suffix `8-g88433133-ab68376540`; the patch-level component is obtained
+from the built source rather than incorrectly treating matrix family `6.1` as
+the complete release number.
+
+The workflow's optional `target_config` dispatch input runs one reviewed matrix
+member for a focused repair. Leaving it empty preserves the complete 50-target
+matrix. This allows the pilot validator correction to reuse its cache without
+rebuilding the 49 already successful targets.
 
 All matrix builds use `clean: false`, GitHub Actions ccache/LTO caches, and a
 portable ccache artifact capped at 2 GiB per successful target. The portable

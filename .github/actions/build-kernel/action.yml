@@ -2680,7 +2680,8 @@ runs:
           # OP-WILD, so validate their GKI family without pretending every
           # device has the pilot's OnePlus build suffix.
           if [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
-            grep -Fq "${OP_KERNEL_VERSION}-${OP_ANDROID_VERSION}-${OP_UNAME}" <<<"$KERNEL_UNAME" || {
+            grep -Fq "Linux version ${OP_KERNEL_VERSION}." <<<"$KERNEL_UNAME" &&
+              grep -Fq -- "-${OP_ANDROID_VERSION}-${OP_UNAME}" <<<"$KERNEL_UNAME" || {
               echo "::error::Unexpected exact stock kernel uname: $KERNEL_UNAME"
               exit 1
             }

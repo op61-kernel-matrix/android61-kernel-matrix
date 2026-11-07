@@ -8,6 +8,11 @@ on:
         required: true
         type: boolean
         default: false
+      target_config:
+        description: Optional reviewed config path; empty builds the complete 50-target matrix
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -32,23 +37,36 @@ jobs:
       - name: Generate Fatal v2.2.0-r4 matrix
         id: matrix
         shell: bash
+        env:
+          TARGET_CONFIG: ${{ inputs.target_config }}
         run: |
           set -euo pipefail
-          mapfile -t files < <(
-            find configs/oos15 configs/oos16 -type f -name '*.json' -print \
-              | sort \
-              | while read -r file; do
-                  # OP13r.json is the Fatal duplicate of the already proven
-                  # OP13r-6.1.141 pilot. Keep the pilot as that matrix member.
-                  [ "$file" = 'configs/oos16/OP13r.json' ] && continue
-                  jq -e '.android_version == "android14" and .kernel_version == "6.1"' "$file" >/dev/null && echo "$file"
-                done
-          )
-          [ "${#files[@]}" -eq 50 ] || {
-            echo "::error::Expected 50 Android 6.1 targets, found ${#files[@]}"
-            printf '%s\n' "${files[@]}"
-            exit 1
-          }
+          if [ -n "$TARGET_CONFIG" ]; then
+            case "$TARGET_CONFIG" in
+              configs/oos15/*.json|configs/oos16/*.json) ;;
+              *) echo "::error::Target must be a reviewed OOS15/OOS16 JSON config"; exit 1 ;;
+            esac
+            test -f "$TARGET_CONFIG"
+            [ "$TARGET_CONFIG" != 'configs/oos16/OP13r.json' ]
+            jq -e '.android_version == "android14" and .kernel_version == "6.1"' "$TARGET_CONFIG" >/dev/null
+            files=("$TARGET_CONFIG")
+          else
+            mapfile -t files < <(
+              find configs/oos15 configs/oos16 -type f -name '*.json' -print \
+                | sort \
+                | while read -r file; do
+                    # OP13r.json is the Fatal duplicate of the already proven
+                    # OP13r-6.1.141 pilot. Keep the pilot as that matrix member.
+                    [ "$file" = 'configs/oos16/OP13r.json' ] && continue
+                    jq -e '.android_version == "android14" and .kernel_version == "6.1"' "$file" >/dev/null && echo "$file"
+                  done
+            )
+            [ "${#files[@]}" -eq 50 ] || {
+              echo "::error::Expected 50 Android 6.1 targets, found ${#files[@]}"
+              printf '%s\n' "${files[@]}"
+              exit 1
+            }
+          fi
           matrix=$(printf '%s\n' "${files[@]}" | jq -Rsc 'split("\n")[:-1] | {config: .}')
           echo "matrix=$(jq -c . <<<"$matrix")" >> "$GITHUB_OUTPUT"
           echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
