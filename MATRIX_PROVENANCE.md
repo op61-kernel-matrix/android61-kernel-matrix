@@ -59,7 +59,10 @@ The Android 12 GKI 5.10 matrix uses the family-specific SuSFS revision recorded
 by the same proven WildKernels `v2.2.0-r4` release:
 
 - Kernel family: `android12-5.10`
-- SuSFS commit: `3c14ad549f826b1f53878ec8c12253efebeed75a`
+- SuSFS commit: `b0e474642cf77ee797004a454fa441362723d0ba`
+  (audited Android 12 / 5.10 family pin containing the
+  `susfs_set_current_proc_no_su` and `susfs_is_current_proc_no_su` API required
+  by final NostalgiKSU SuCompat)
 - Required patch: `kernel_patches/50_add_susfs_in_gki-android12-5.10.patch`
 
 The Android 6.1 SuSFS revision must not be reused for 5.10. The build action
