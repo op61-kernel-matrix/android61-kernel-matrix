@@ -66,3 +66,17 @@ The Android 6.1 SuSFS revision must not be reused for 5.10. The build action
 now verifies that the selected family patch exists and is non-empty before it
 touches the kernel tree, preventing a missing patch from surfacing later as a
 misleading inline-hook compilation failure.
+
+That proven family patch predates three direct calls required by the finalized
+NostalgiKSU 33168 inline ABI. For Android 12 / 5.10 NostalgiKSU builds, the
+action therefore completes `do_execveat_common()` with the current direct
+contract after applying the pinned family patch:
+
+- `ksu_handle_post_execveat_sucompat`
+- `ksu_setup_preinit_file`
+- `ksu_preinit_handle_post_execveat`
+
+This is a real hook-site integration with the upstream preinit retry and
+post-exec control flow. The inline checker is not bypassed, and the workflow
+does not fall back to Hybrid mode. All reviewed 5.10 targets continue to
+require Inline hook mode and seccomp Filter.
