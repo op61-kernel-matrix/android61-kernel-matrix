@@ -1,0 +1,189 @@
+name: OnePlus Android 5.10 NostalgiKSU matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: Upload diagnostic artifacts
+        required: true
+        type: boolean
+        default: false
+      target_config:
+        description: Optional reviewed config path; empty builds the complete 38-target matrix
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  # Match the active 6.1 pilot group so this full matrix waits behind it.
+  group: oneplus-android61-matrix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare proven 5.10 matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      count: ${{ steps.matrix.outputs.count }}
+    steps:
+      - name: Checkout matrix
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Generate Fatal v2.2.0-r4 Android 5.10 matrix
+        id: matrix
+        shell: bash
+        env:
+          TARGET_CONFIG: ${{ inputs.target_config }}
+        run: |
+          set -euo pipefail
+          if [ -n "$TARGET_CONFIG" ]; then
+            case "$TARGET_CONFIG" in
+              configs/a14/*.json|configs/a15/*.json|configs/a16/*.json) ;;
+              *) echo "::error::Target must be a reviewed A14/A15/A16 JSON config"; exit 1 ;;
+            esac
+            test -f "$TARGET_CONFIG"
+            jq -e '.android_version == "android12" and .kernel_version == "5.10"' "$TARGET_CONFIG" >/dev/null
+            files=("$TARGET_CONFIG")
+          else
+            mapfile -t files < <(
+              find configs/a14 configs/a15 configs/a16 -type f -name '*.json' -print \
+                | sort \
+                | while read -r file; do
+                    jq -e '.android_version == "android12" and .kernel_version == "5.10"' "$file" >/dev/null && echo "$file"
+                  done
+            )
+            [ "${#files[@]}" -eq 38 ] || {
+              echo "::error::Expected 38 Android 5.10 targets, found ${#files[@]}"
+              printf '%s\n' "${files[@]}"
+              exit 1
+            }
+          fi
+          matrix=$(printf '%s\n' "${files[@]}" | jq -Rsc 'split("\n")[:-1] | {config: .}')
+          echo "matrix=$(jq -c . <<<"$matrix")" >> "$GITHUB_OUTPUT"
+          echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.config }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout matrix
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential clang lld flex bison \
+            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+            libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+            dos2unix kmod libdw-dev elfutils pigz zip patch aria2 cpio zstd
+
+      - name: Load reviewed device configuration
+        id: config
+        shell: bash
+        env:
+          CONFIG_PATH: ${{ matrix.config }}
+        run: |
+          set -euo pipefail
+          test -f "$CONFIG_PATH"
+          JSON=$(jq -c '.susfs=true' "$CONFIG_PATH")
+          jq -e '.android_version == "android12" and .kernel_version == "5.10"' <<<"$JSON" >/dev/null
+          printf 'json=%s\n' "$JSON" >> "$GITHUB_OUTPUT"
+          model=$(jq -r '.model' <<<"$JSON")
+          os_version=$(jq -r '.os_version' <<<"$JSON")
+          printf 'cache_name=%s-%s\n' "$model" "$os_version" >> "$GITHUB_OUTPUT"
+
+      - name: Build cached NostalgiKSU kernel
+        id: build
+        uses: ./.github/actions/build-kernel
+        with:
+          op_config_json: ${{ steps.config.outputs.json }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          ksu_type: NostalgiKSU
+          susfs_commit_hash_or_branch: ee155a1ad4219804a7c54cb39dd4fa1b5c2a3fa4
+          optimize_level: O2
+          clean: false
+          debug: ${{ inputs.debug }}
+
+      - name: Verify matrix artifact contract
+        shell: bash
+        env:
+          ZIP_NAME: ${{ steps.build.outputs.zip_name }}
+        run: |
+          set -euxo pipefail
+          ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
+          test -n "$ZIP_PATH"
+          [[ "$ZIP_NAME" == NOSTALGIC-AK3_*_NKSU_33168_SuSFS_v2.3.0.zip ]]
+          VERIFY_DIR=$(mktemp -d)
+          trap 'rm -rf "$VERIFY_DIR"' EXIT
+          unzip -p "$ZIP_PATH" anykernel.sh > "$VERIFY_DIR/anykernel.sh"
+          unzip -p "$ZIP_PATH" tools/ak3-core.sh > "$VERIFY_DIR/ak3-core.sh"
+          unzip -p "$ZIP_PATH" banner > "$VERIFY_DIR/banner"
+          grep -q '^block=boot$' "$VERIFY_DIR/anykernel.sh"
+          grep -q '^is_slot_device=auto$' "$VERIFY_DIR/anykernel.sh"
+          grep -q '^split_boot$' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq '  -> OKI Kernel Supported: $ksu_supported' "$VERIFY_DIR/anykernel.sh"
+          grep -q 'Core stack: NostalgiKSU 33168 + NOSTALGIC SuSFS 2.3.0 GKI-2' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'ui_print "NostalgiKSU"' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'ui_print "NOSTALGIC Kernel Lab"' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'Built with love by NOSTALGIC @Reals3s' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'Credits: OnePlus OSS, NostalgiKSU contributors and AnyKernel3.' "$VERIFY_DIR/anykernel.sh"
+          [ "$(tr -d '\r\n' < "$VERIFY_DIR/banner")" = 'NostalgiKSU' ]
+          grep -Fq 'AKHOME="$(pwd -P)"' "$VERIFY_DIR/anykernel.sh"
+          grep -q '^magisk_patched=0$' "$VERIFY_DIR/anykernel.sh"
+          grep -Fq 'mkdir "$SPLITIMG" || abort' "$VERIFY_DIR/ak3-core.sh"
+          ! grep -Fq 'mkdir -p "$SPLITIMG"' "$VERIFY_DIR/ak3-core.sh"
+          ! grep -qiE 'huangdihd|wild[[:space:]_-]*kernels?|fatal|bakasu|resusfs|nomount|resuki' "$VERIFY_DIR/anykernel.sh"
+
+      - name: Package portable compiler cache
+        if: success()
+        shell: bash
+        env:
+          CONFIG_PATH: ${{ matrix.config }}
+          CACHE_NAME: ${{ steps.config.outputs.cache_name }}
+        run: |
+          set -euo pipefail
+          test -d /tmp/ccache
+          ccache --max-size=2G
+          ccache --cleanup
+          mkdir -p portable-cache
+          cat > portable-cache/metadata.json <<EOF
+          {
+            "format": "nostalgiksu-portable-ccache-v1",
+            "source": "WildKernels/OnePlus_KernelSU_SUSFS@v2.2.0-r4",
+            "source_commit": "d44240312aeb978463b66c3a3155c6d99a7c7a3c",
+            "config": "$CONFIG_PATH",
+            "cache_name": "$CACHE_NAME",
+            "clean_build": false,
+            "ksu": "NostalgiKSU 33168",
+            "kernel_build": "v1.4.5-33168-1389d796@ci",
+            "susfs_commit": "ee155a1ad4219804a7c54cb39dd4fa1b5c2a3fa4"
+          }
+          EOF
+          tar --zstd -cf "portable-cache/${CACHE_NAME}.tar.zst" -C /tmp ccache
+          sha256sum "portable-cache/${CACHE_NAME}.tar.zst" > "portable-cache/${CACHE_NAME}.tar.zst.sha256"
+
+      - name: Upload portable compiler cache
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-ccache-${{ steps.config.outputs.cache_name }}
+          path: portable-cache/
+          compression-level: 0
+          retention-days: 30

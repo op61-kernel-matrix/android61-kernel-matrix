@@ -2722,6 +2722,15 @@ runs:
             exit 1
           fi
         done
+        # Enforce the Manager-visible pilot security contract: inline SuSFS
+        # hook mode and seccomp filtering, never tracepoint/hybrid or disabled.
+        for security_marker in CONFIG_KSU_HOOK_SUSFS_INLINE CONFIG_SECCOMP CONFIG_SECCOMP_FILTER; do
+          if ! grep -qE "^${security_marker}(=y)?$" "$IMAGE_STRINGS"; then
+            echo "::error::Missing required security marker: $security_marker"
+            rm -f "$IMAGE_STRINGS"
+            exit 1
+          fi
+        done
         if [ "${{ inputs.ksu_type }}" = "BakaSU" ]; then
           for capability in CMD_SUSFS_SET_PRIORITY_UID_FILTER susfs_set_priority_uid_filter; do
             grep -qF "$capability" "$IMAGE_STRINGS" || { echo "::error::Missing BakaSU priority UID capability: $capability"; exit 1; }
@@ -2741,6 +2750,8 @@ runs:
         fi
         rm -f "$IMAGE_STRINGS"
         echo "   - SuSFS capabilities: all 9 required features present"
+        echo "   - Hook mode: SUSFS Inline"
+        echo "   - Seccomp status: Filter"
         
         printf 'warnings_count=%s\n' "$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
         printf 'image_sha256=%s\n' "$IMG_SHA256" >> "$GITHUB_OUTPUT"
@@ -2884,6 +2895,18 @@ runs:
           cp "$GITHUB_ACTION_PATH/assets/nostalgiksu-banner" banner
         elif [ "${{ inputs.ksu_type }}" = "BakaSU" ]; then
           cp "$GITHUB_ACTION_PATH/assets/bakasu-banner" banner
+        fi
+
+        # Fatal's proven source is intentionally retained, but none of its
+        # WildKernels/Fatal installer footer or presentation may survive in a
+        # NOSTALGIC-AK3 deliverable.
+        grep -Fq 'ui_print "NostalgiKSU"' anykernel.sh
+        grep -Fq 'ui_print "NOSTALGIC Kernel Lab"' anykernel.sh
+        grep -Fq 'Built with love by NOSTALGIC @Reals3s' anykernel.sh
+        grep -Fq 'Credits: OnePlus OSS, NostalgiKSU contributors and AnyKernel3.' anykernel.sh
+        if grep -qiE 'huangdihd|wild[[:space:]_-]*kernels?|fatal|bakasu|resusfs|nomount|resuki' anykernel.sh; then
+          echo "::error::Foreign installer branding survived the NOSTALGIC-AK3 footer rewrite"
+          exit 1
         fi
 
         if [ "$OP_BBG" = "true" ]; then

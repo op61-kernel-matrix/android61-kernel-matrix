@@ -152,7 +152,7 @@ jobs:
           grep -q '^magisk_patched=0$' "$VERIFY_DIR/anykernel.sh"
           grep -Fq 'mkdir "$SPLITIMG" || abort' "$VERIFY_DIR/ak3-core.sh"
           ! grep -Fq 'mkdir -p "$SPLITIMG"' "$VERIFY_DIR/ak3-core.sh"
-          ! grep -qiE 'huangdihd|bakasu|resusfs|nomount|resuki' "$VERIFY_DIR/anykernel.sh"
+          ! grep -qiE 'huangdihd|wild[[:space:]_-]*kernels?|fatal|bakasu|resusfs|nomount|resuki' "$VERIFY_DIR/anykernel.sh"
 
       - name: Package portable compiler cache
         if: success()
