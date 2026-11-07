@@ -2801,14 +2801,19 @@ runs:
         else:
             raise SystemExit("kernel.string was not found in anykernel.sh")
 
-        marker = 'ui_print "Huangdihd\'s Fork of Wild Kernels for OnePlus Telegram Channel:"'
-        try:
-            start = lines.index(marker)
-        except ValueError:
-            start = -1
+        footer_markers = (
+            'ui_print "Huangdihd\'s Fork of Wild Kernels for OnePlus Telegram Channel:"',
+            'ui_print "WildKernels Telegram Channel:"',
+        )
+        start = next(
+            (lines.index(marker) for marker in footer_markers if marker in lines),
+            -1,
+        )
         if start >= 0:
             footer = Path(os.environ["GITHUB_ACTION_PATH"], "nostalgic-anykernel-footer.sh").read_text().splitlines()
             lines[start:] = footer
+        else:
+            raise SystemExit("Known AnyKernel footer marker was not found")
 
         # Match the proven OP13R pilot installer output. Fatal's AK3 base calls
         # this "Wild Kernels Supported"; NOSTALGIC-AK3 must show the neutral

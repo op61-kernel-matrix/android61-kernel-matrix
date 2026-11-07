@@ -111,7 +111,7 @@ jobs:
         env:
           ZIP_NAME: ${{ steps.build.outputs.zip_name }}
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$ZIP_PATH"
           [[ "$ZIP_NAME" == NOSTALGIC-AK3_*_NKSU_33168_SuSFS_v2.3.0.zip ]]
