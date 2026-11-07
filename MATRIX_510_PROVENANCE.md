@@ -9,6 +9,11 @@ used by the Android 6.1 matrix:
 - Imported scope: Android 12 GKI 5.10 for A14, A15, and A16
 - Reviewed matrix size: 38 targets (9 A14, 23 A15, 6 A16)
 
+The imported Fatal configuration schema identifies the userspace generation as
+`A14`, `A15`, or `A16`. These values are preserved verbatim because they select
+the matching manifest directory and version-specific patch assets; the shared
+action validates them alongside its existing `OOS##` schema.
+
 The device manifests, branches, toolchains, and model settings remain those of
 the proven Fatal release. The root stack and packaging contract use the shared
 NostalgiKSU matrix action:

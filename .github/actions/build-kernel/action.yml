@@ -193,8 +193,8 @@ runs:
         
         if [[ -z "$os_version" ]]; then
           errors+=("Input 'os_version' cannot be empty")
-        elif [[ ! "$os_version" =~ ^OOS ]]; then
-          errors+=("Input 'os_version' does not start with 'OOS'. Got: '$os_version'")
+        elif [[ ! "$os_version" =~ ^(OOS[0-9]+|A(14|15|16))$ ]]; then
+          errors+=("Input 'os_version' must be an OOS release or reviewed Android generation A14/A15/A16. Got: '$os_version'")
         fi
         
         if [[ -z "$hmbird" ]]; then
