@@ -1483,6 +1483,8 @@ runs:
         CONFIG_KSU_SUSFS_SUS_SU=n
         CONFIG_KSU_HOOK_TRACEPOINT=n
         CONFIG_KSU_HOOK_SUSFS_INLINE=y
+        CONFIG_SECCOMP=y
+        CONFIG_SECCOMP_FILTER=y
         EOF
         
         echo "::endgroup::"
