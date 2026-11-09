@@ -19,8 +19,9 @@ concurrency:
 env:
   PILOT_CONFIG: configs/oos16/OP13r-6.1.141.json
   REPLACED_CONFIG: configs/a16/OP13r-6.1.118.json
+  SUSFS_PIN_MANIFEST: configs/susfs-2.4.0-pins.json
   SUSFS_REPOSITORY: https://gitlab.com/simonpunk/susfs4ksu.git
-  REQUIRED_SUSFS_VERSION: "2.3.0"
+  REQUIRED_SUSFS_VERSION: "2.4.0"
 
 jobs:
   prepare:
@@ -33,23 +34,24 @@ jobs:
       susfs_pins: ${{ steps.plan.outputs.susfs_pins }}
     steps:
       - name: Checkout matrix controller
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
-      - name: Resolve and validate SuSFS 2.3.0 family pins
+      - name: Resolve and validate SuSFS 2.4.0 family and per-device data
         id: plan
         shell: bash
         run: |
           set -euo pipefail
 
-          declare -A requested_ref=(
-            [android12-5.10]=7373f8d8cbaee0742d3a18b0ab44d0a51d32cf78
-            [android13-5.15]=415e4143ee1dd557c54d2b3d94ef098e5d1236f4
-            [android14-6.1]=153f88df3be2501d2d33364f8fe05247aecb3cef
-            [android15-6.6]=3f0b811b2e105afd8dc858cd71389090e01f404b
-            [android16-6.12]=b213c54126fb243595ce7876e91d84d6e0861fec
-          )
+          test -s "$SUSFS_PIN_MANIFEST"
+          jq -e --arg version "$REQUIRED_SUSFS_VERSION" --arg source "$SUSFS_REPOSITORY" \
+            '.version == $version and .source == $source and (.families | length) == 5' \
+            "$SUSFS_PIN_MANIFEST" >/dev/null
+          declare -A requested_ref=()
+          for family in android12-5.10 android13-5.15 android14-6.1 android15-6.6 android16-6.12; do
+            requested_ref[$family]=$(jq -er --arg family "$family" '.families[$family]' "$SUSFS_PIN_MANIFEST")
+          done
           declare -A resolved_ref=()
           pins='{}'
 
@@ -103,8 +105,10 @@ jobs:
               *) echo "::error::Unsupported family ${family} in ${file}"; exit 1 ;;
             esac
             counts[$family]=$(( ${counts[$family]:-0} + 1 ))
-            jq -nc --arg config "$file" --arg family "$family" --arg susfs_ref "${resolved_ref[$family]}" \
-              '{config:$config,family:$family,susfs_ref:$susfs_ref}' >> "$plan"
+            jq -nc --arg config "$file" --arg family "$family" \
+              --arg susfs_version "$REQUIRED_SUSFS_VERSION" \
+              --arg susfs_ref "${resolved_ref[$family]}" \
+              '{config:$config,family:$family,susfs_version:$susfs_version,susfs_ref:$susfs_ref}' >> "$plan"
           done
 
           # Counts include the OP13R 6.1.141 pilot, which replaces the older
@@ -128,7 +132,8 @@ jobs:
             echo '- Pilot first: `configs/oos16/OP13r-6.1.141.json`'
             echo '- Replaced legacy member: `configs/a16/OP13r-6.1.118.json`'
             echo '- Families: 5.10=38, 5.15=25, 6.1=53, 6.6=34, 6.12=8'
-            echo '- SuSFS: exactly 2.3.0 on all five family pins'
+            echo '- SuSFS: exactly 2.4.0 on all five immutable family pins'
+            echo '- Every device record carries its family, SuSFS version and resolved commit'
             echo "- Resolved pins: \`$pins\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -139,7 +144,7 @@ jobs:
     timeout-minutes: 360
     steps:
       - name: Checkout matrix controller
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -159,7 +164,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          JSON=$(jq -c '.susfs=true' "$PILOT_CONFIG")
+          JSON=$(jq -c --arg version "$REQUIRED_SUSFS_VERSION" \
+            --arg family 'android14-6.1' \
+            --arg commit '${{ needs.prepare.outputs.pilot_susfs_ref }}' \
+            '.susfs=true | .susfs_version=$version | .susfs_family=$family | .susfs_commit=$commit' \
+            "$PILOT_CONFIG")
           jq -e '.android_version == "android14" and .kernel_version == "6.1" and .uname == "8-g88433133-ab68376540"' <<<"$JSON" >/dev/null
           echo "json=$JSON" >> "$GITHUB_OUTPUT"
 
@@ -183,10 +192,10 @@ jobs:
           set -euo pipefail
           ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$ZIP_PATH"
-          [[ "$ZIP_NAME" == NOSTALGIC-AK3_OP13r-6.1.141_*_NKSU_33174-6_SuSFS_v2.3.0.zip ]]
+          [[ "$ZIP_NAME" == NOSTALGIC-AK3_OP13r-6.1.141_*_NKSU_33174-6_SuSFS_v2.4.0.zip ]]
           unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'NostalgiKSU'
           unzip -p "$ZIP_PATH" banner | tr -d '\r\n' | grep -Fxq 'NostalgiKSU'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'Core stack: NostalgiKSU 33174-6 + NOSTALGIC SuSFS 2.3.0 GKI-2'
+          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'Core stack: NostalgiKSU 33174-6 + NOSTALGIC SuSFS 2.4.0 GKI-2'
 
   build:
     name: "${{ matrix.family }} · ${{ matrix.config }}"
@@ -199,7 +208,7 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - name: Checkout matrix controller
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -220,12 +229,21 @@ jobs:
         env:
           CONFIG_PATH: ${{ matrix.config }}
           EXPECTED_FAMILY: ${{ matrix.family }}
+          EXPECTED_SUSFS_VERSION: ${{ matrix.susfs_version }}
+          EXPECTED_SUSFS_COMMIT: ${{ matrix.susfs_ref }}
         run: |
           set -euo pipefail
           test -s "$CONFIG_PATH"
-          JSON=$(jq -c '.susfs=true' "$CONFIG_PATH")
+          JSON=$(jq -c --arg version "$EXPECTED_SUSFS_VERSION" \
+            --arg family "$EXPECTED_FAMILY" --arg commit "$EXPECTED_SUSFS_COMMIT" \
+            '.susfs=true | .susfs_version=$version | .susfs_family=$family | .susfs_commit=$commit' \
+            "$CONFIG_PATH")
           family=$(jq -r '"\(.android_version)-\(.kernel_version)"' <<<"$JSON")
           [ "$family" = "$EXPECTED_FAMILY" ]
+          jq -e --arg version "$REQUIRED_SUSFS_VERSION" --arg family "$EXPECTED_FAMILY" \
+            --arg commit "$EXPECTED_SUSFS_COMMIT" \
+            '.susfs == true and .susfs_version == $version and .susfs_family == $family and .susfs_commit == $commit' \
+            <<<"$JSON" >/dev/null
           echo "json=$JSON" >> "$GITHUB_OUTPUT"
 
       - name: Build and enforce all nine capabilities

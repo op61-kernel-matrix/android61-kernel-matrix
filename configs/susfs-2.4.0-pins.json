@@ -1,0 +1,12 @@
+{
+  "version": "2.4.0",
+  "source": "https://gitlab.com/simonpunk/susfs4ksu.git",
+  "release_reference": "WildKernels/OnePlus_KernelSU_SUSFS v2.4.0-r1",
+  "families": {
+    "android12-5.10": "5436438b5cc77f146e04f71070da153dabe17a9d",
+    "android13-5.15": "fe943d15ec6a1891f7a360bf210589bdffe4e318",
+    "android14-6.1": "69b8e734920b8f9ed885ab8d112969719698e242",
+    "android15-6.6": "ec03d0c73b821afa1d5037d6d493216f59744fcb",
+    "android16-6.12": "395a8c0c88d348e9fe7c14f66a456fde4653287c"
+  }
+}

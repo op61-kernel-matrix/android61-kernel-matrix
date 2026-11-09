@@ -1082,6 +1082,14 @@ runs:
         cp "$SUSFS_FOLDER/kernel_patches/include/linux/"* "$COMMON_KERNEL_FOLDER/include/linux/"
         
         susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
+        if [ "${susfs_version#v}" != "${OP_SUSFS_VERSION:-}" ]; then
+          echo "::error::Per-device SuSFS version ${OP_SUSFS_VERSION:-missing} does not match fetched payload $susfs_version"
+          exit 1
+        fi
+        if [ "${SUSFS_COMMIT_SHA:-}" != "${OP_SUSFS_COMMIT:-}" ]; then
+          echo "::error::Per-device SuSFS commit ${OP_SUSFS_COMMIT:-missing} does not match fetched ref ${SUSFS_COMMIT_SHA:-missing}"
+          exit 1
+        fi
         echo "SUSVER=$susfs_version" >> $GITHUB_ENV
         echo "$susfs_version" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
         echo "SusFS Version: $susfs_version"
@@ -1114,7 +1122,7 @@ runs:
               echo "ℹ️ Skipping KernelSU folder patch for BakaSU"
             fi
             ;;
-          "v2.2.0"|"v2.3.0")
+          "v2.2.0"|"v2.3.0"|"v2.4.0")
             if [ "${{ inputs.ksu_type }}" = "KSU" ]; then
               cd "$KSU_FOLDER"
               patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
@@ -1123,7 +1131,7 @@ runs:
               cd "$KSU_FOLDER"
               patch -p1 --forward < "$GITHUB_ACTION_PATH/patches/bakasu-priority-uid-dispatch.patch"
             else
-              echo "NostalgiKSU already provides the native SuSFS 2.3.0 dispatch; no foreign dispatch patch applied"
+              echo "NostalgiKSU already provides the native SuSFS dispatch for $susfs_version; no foreign dispatch patch applied"
             fi
             ;;
           *)
@@ -1437,6 +1445,11 @@ runs:
             echo "Adjusted $vma_pad_compat_count SUSFS VMA padding call(s) for the legacy task_mmu API"
           fi
         fi
+
+        # Fatal/WildKernels SuSFS 2.4.0 compatibility policy for recent
+        # OnePlus sources. This is intentionally source-aware and fail-closed.
+        python3 "$GITHUB_WORKSPACE/.github/scripts/apply-susfs-240-oneplus-compat.py" \
+          "$COMMON_KERNEL_FOLDER" "${TKERNEL_VER}"
         
         # Revert Fake kernel patch
         if [ "$fake_patched_expand" = 1 ]; then
@@ -2719,7 +2732,7 @@ runs:
           fi
         fi
 
-        # Reject the artifact unless all nine SuSFS 2.3.0 capabilities remain.
+        # Reject the artifact unless all nine required SuSFS capabilities remain.
         REQUIRED_SUSFS_STRINGS=(
           CONFIG_KSU_SUSFS_SUS_PATH
           CONFIG_KSU_SUSFS_SUS_MOUNT
@@ -2941,7 +2954,8 @@ runs:
         # they resolved to the same full kernel version.
         ZIP_MODEL="$OP_MODEL"
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33174-6_SuSFS_${SUSVER:-2.3.0}.zip"
+          test -n "${SUSVER:-}"
+          ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33174-6_SuSFS_${SUSVER}.zip"
         elif [ "${{ env.OP_SUSFS }}" = true ]; then
           ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_${{ inputs.ksu_type }}_${KSUVER:-unknown}_SuSFS_${SUSVER:-unknown}.zip"
         else
