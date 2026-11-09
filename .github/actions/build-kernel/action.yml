@@ -1007,12 +1007,12 @@ runs:
         echo "✅ BakaSU added (commit: ${KSU_COMMIT_SHA:0:8})"
         echo "::endgroup::"
 
-    - name: Add finalized NostalgiKSU 33168
+    - name: Add device-verified NostalgiKSU 33174-6
       shell: bash
       if: ${{ inputs.ksu_type == 'NostalgiKSU' }}
       run: |
         set -euo pipefail
-        echo "::group::Add finalized NostalgiKSU 33168"
+        echo "::group::Add device-verified NostalgiKSU 33174-6"
         cd "$KERNEL_PLATFORM_FOLDER"
         rm -rf KernelSU
         mkdir -p KernelSU
@@ -1022,11 +1022,11 @@ runs:
         test -f KernelSU/kernel/extension/susfs.c
         test -L KernelSU/kernel/include/uapi
 
-        # Pin the exact kernel ABI shipped by the run-32 manager.  The public
-        # matrix repository vendors commit 1389d79617 from the finalized app
-        # tree, so CI never substitutes a renamed foreign KernelSU fork.
-        sed -i '1i FINASU_TRUSTED_SIZE := 0x515\nFINASU_TRUSTED_HASH := ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456\nKSU_VERSION_FULL_OVERRIDE := v1.4.5-33168-1389d796@ci\nKSU_VERSION_OVERRIDE := 33168' KernelSU/kernel/Kbuild
-        KSU_COMMIT_SHA=1389d79617a91038a03883a5d6b91dfa7957f5d6
+        # Pin the exact kernel ABI shipped by the independently audited and
+        # device-verified run-55 manager. CI must never substitute another
+        # KernelSU fork or merely relabel the older 33168 source.
+        sed -i '1i FINASU_TRUSTED_SIZE := 0x515\nFINASU_TRUSTED_HASH := ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456\nKSU_VERSION_FULL_OVERRIDE := v1.5.0-33174-4373b04d@ci\nKSU_VERSION_OVERRIDE := 33174' KernelSU/kernel/Kbuild
+        KSU_COMMIT_SHA=4373b04d2171c194d398c7e2ab1bbbdca65e1c40
 
         DRIVER_DIR="$COMMON_KERNEL_FOLDER/drivers"
         ln -sfn "$(realpath --relative-to="$DRIVER_DIR" "$KERNEL_PLATFORM_FOLDER/KernelSU/kernel")" "$DRIVER_DIR/kernelsu"
@@ -1040,9 +1040,9 @@ runs:
         EOF
 
         echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> "$GITHUB_ENV"
-        echo "KSUVER=33168" >> "$GITHUB_ENV"
+        echo "KSUVER=33174-6" >> "$GITHUB_ENV"
         echo "NostalgiKSU" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
-        echo "33168" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
+        echo "33174-6" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
         echo "NostalgiKSU source: $KSU_COMMIT_SHA"
         echo "::endgroup::"
 
@@ -1357,13 +1357,13 @@ runs:
         fi
 
         # The proven Android 12 / 5.10 SUSFS family patch predates the final
-        # NostalgiKSU 33168 direct preinit and post-exec contract. Complete
+        # NostalgiKSU direct preinit and post-exec contract. Complete
         # the real do_execveat_common() integration instead of weakening the
         # inline-hook checker.
         if [ "${{ env.ANDROID_VER }}" = "android12" ] && \
            [ "${{ env.KERNEL_VER }}" = "5.10" ] && \
            [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          echo "Completing final NostalgiKSU 33168 exec hooks for Android 12 / 5.10..."
+          echo "Completing NostalgiKSU 33174 exec hooks for Android 12 / 5.10..."
           python3 "$GITHUB_WORKSPACE/.github/scripts/complete-nostalgiksu-510-exec-hooks.py" fs/exec.c
         fi
 
@@ -2755,8 +2755,8 @@ runs:
           done
         fi
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          grep -qF '33168' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33168 marker missing"; exit 1; }
-          grep -qF 'v1.4.5-33168-1389d796@ci' "$IMAGE_STRINGS" || { echo "::error::Final NostalgiKSU source marker missing"; exit 1; }
+          grep -qF '33174' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33174 marker missing"; exit 1; }
+          grep -qF 'v1.5.0-33174-4373b04d@ci' "$IMAGE_STRINGS" || { echo "::error::Verified NostalgiKSU 33174 source marker missing"; exit 1; }
           grep -qF 'ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456' "$IMAGE_STRINGS" || { echo "::error::Final run-33 manager certificate missing"; exit 1; }
           if grep -qiE 'OP-BAKASU|huangdihd|ReSukiSU' "$IMAGE_STRINGS"; then
             echo "::error::Foreign visible kernel branding found in Image"
@@ -2941,7 +2941,7 @@ runs:
         # they resolved to the same full kernel version.
         ZIP_MODEL="$OP_MODEL"
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33168_SuSFS_${SUSVER:-2.3.0}.zip"
+          ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33174-6_SuSFS_${SUSVER:-2.3.0}.zip"
         elif [ "${{ env.OP_SUSFS }}" = true ]; then
           ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_${{ inputs.ksu_type }}_${KSUVER:-unknown}_SuSFS_${SUSVER:-unknown}.zip"
         else

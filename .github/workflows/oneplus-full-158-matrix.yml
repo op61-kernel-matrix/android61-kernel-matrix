@@ -179,9 +179,10 @@ jobs:
           set -euo pipefail
           ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$ZIP_PATH"
-          [[ "$ZIP_NAME" == NOSTALGIC-AK3_OP13r-6.1.141_*_SuSFS_v2.3.0.zip ]]
+          [[ "$ZIP_NAME" == NOSTALGIC-AK3_OP13r-6.1.141_*_NKSU_33174-6_SuSFS_v2.3.0.zip ]]
           unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'NostalgiKSU'
           unzip -p "$ZIP_PATH" banner | tr -d '\r\n' | grep -Fxq 'NostalgiKSU'
+          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'Core stack: NostalgiKSU 33174-6 + NOSTALGIC SuSFS 2.3.0 GKI-2'
 
   build:
     name: "${{ matrix.family }} · ${{ matrix.config }}"
