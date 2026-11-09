@@ -2753,15 +2753,30 @@ runs:
             exit 1
           fi
         done
-        # Enforce the Manager-visible pilot security contract: inline SuSFS
-        # hook mode and seccomp filtering, never tracepoint/hybrid or disabled.
+        # Compiler optimization does not guarantee that Kconfig option names
+        # survive as literal strings in Image. Audit the effective build config
+        # instead: this is the authoritative source for the selected hook mode.
+        FINAL_CONFIG="$COMMON_KERNEL_FOLDER/out/.config"
+        if [ ! -s "$FINAL_CONFIG" ]; then
+          FINAL_CONFIG=$(find "$COMMON_KERNEL_FOLDER/out" -type f -name .config -print -quit)
+        fi
+        if [ -z "${FINAL_CONFIG:-}" ] || [ ! -s "$FINAL_CONFIG" ]; then
+          echo "::error::Final kernel .config was not found for the security audit"
+          rm -f "$IMAGE_STRINGS"
+          exit 1
+        fi
         for security_marker in CONFIG_KSU_HOOK_SUSFS_INLINE CONFIG_SECCOMP CONFIG_SECCOMP_FILTER; do
-          if ! grep -qE "^${security_marker}(=y)?$" "$IMAGE_STRINGS"; then
-            echo "::error::Missing required security marker: $security_marker"
+          if ! grep -qx "${security_marker}=y" "$FINAL_CONFIG"; then
+            echo "::error::Final kernel config is missing ${security_marker}=y"
             rm -f "$IMAGE_STRINGS"
             exit 1
           fi
         done
+        if grep -qx 'CONFIG_KSU_HOOK_TRACEPOINT=y' "$FINAL_CONFIG"; then
+          echo "::error::Tracepoint hook mode is enabled alongside required SUSFS Inline mode"
+          rm -f "$IMAGE_STRINGS"
+          exit 1
+        fi
         if [ "${{ inputs.ksu_type }}" = "BakaSU" ]; then
           for capability in CMD_SUSFS_SET_PRIORITY_UID_FILTER susfs_set_priority_uid_filter; do
             grep -qF "$capability" "$IMAGE_STRINGS" || { echo "::error::Missing BakaSU priority UID capability: $capability"; exit 1; }
