@@ -2974,6 +2974,11 @@ runs:
         fi
         
         mv "$ZIP_NAME" "$ARTIFACTS_FOLDER/"
+
+        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
+          bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-ak3.sh" \
+            "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
+        fi
         
         find "$ARTIFACTS_FOLDER" -maxdepth 1 -type f ! -name "$ZIP_NAME" -delete
         

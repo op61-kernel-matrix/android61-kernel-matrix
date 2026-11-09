@@ -99,16 +99,17 @@ jobs:
           for file in "${files[@]}"; do
             android=$(jq -er '.android_version' "$file")
             kernel=$(jq -er '.kernel_version' "$file")
+            model=$(jq -er '.model' "$file")
             family="${android}-${kernel}"
             case "$family" in
               android12-5.10|android13-5.15|android14-6.1|android15-6.6|android16-6.12) ;;
               *) echo "::error::Unsupported family ${family} in ${file}"; exit 1 ;;
             esac
             counts[$family]=$(( ${counts[$family]:-0} + 1 ))
-            jq -nc --arg config "$file" --arg family "$family" \
+            jq -nc --arg config "$file" --arg family "$family" --arg model "$model" \
               --arg susfs_version "$REQUIRED_SUSFS_VERSION" \
               --arg susfs_ref "${resolved_ref[$family]}" \
-              '{config:$config,family:$family,susfs_version:$susfs_version,susfs_ref:$susfs_ref}' >> "$plan"
+              '{config:$config,family:$family,model:$model,susfs_version:$susfs_version,susfs_ref:$susfs_ref}' >> "$plan"
           done
 
           # Counts include the OP13R 6.1.141 pilot, which replaces the older
@@ -184,7 +185,7 @@ jobs:
           clean: false
           debug: ${{ inputs.debug }}
 
-      - name: Enforce pilot artifact identity
+      - name: Enforce pilot artifact identity and flashing branding
         shell: bash
         env:
           ZIP_NAME: ${{ steps.build.outputs.zip_name }}
@@ -192,10 +193,7 @@ jobs:
           set -euo pipefail
           ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$ZIP_PATH"
-          [[ "$ZIP_NAME" == NOSTALGIC-AK3_OP13r-6.1.141_*_NKSU_33174-6_SuSFS_v2.4.0.zip ]]
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'NostalgiKSU'
-          unzip -p "$ZIP_PATH" banner | tr -d '\r\n' | grep -Fxq 'NostalgiKSU'
-          unzip -p "$ZIP_PATH" anykernel.sh | grep -Fq 'Core stack: NostalgiKSU 33174-6 + NOSTALGIC SuSFS 2.4.0 GKI-2'
+          bash .github/scripts/audit-nostalgic-ak3.sh "$ZIP_PATH" 'OP13r-6.1.141'
 
   build:
     name: "${{ matrix.family }} · ${{ matrix.config }}"
@@ -247,6 +245,7 @@ jobs:
           echo "json=$JSON" >> "$GITHUB_OUTPUT"
 
       - name: Build and enforce all nine capabilities
+        id: build
         uses: ./.github/actions/build-kernel
         with:
           op_config_json: ${{ steps.config.outputs.json }}
@@ -256,6 +255,17 @@ jobs:
           optimize_level: O2
           clean: false
           debug: ${{ inputs.debug }}
+
+      - name: Enforce target flashing branding
+        shell: bash
+        env:
+          ZIP_NAME: ${{ steps.build.outputs.zip_name }}
+          EXPECTED_MODEL: ${{ matrix.model }}
+        run: |
+          set -euo pipefail
+          ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
+          test -n "$ZIP_PATH"
+          bash .github/scripts/audit-nostalgic-ak3.sh "$ZIP_PATH" "$EXPECTED_MODEL"
 
   complete:
     name: Confirm complete green 158-target release
