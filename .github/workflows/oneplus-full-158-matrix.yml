@@ -44,16 +44,20 @@ jobs:
           set -euo pipefail
 
           declare -A requested_ref=(
-            [android12-5.10]=b0e474642cf77ee797004a454fa441362723d0ba
-            [android13-5.15]=gki-android13-5.15
-            [android14-6.1]=ee155a1ad4219804a7c54cb39dd4fa1b5c2a3fa4
-            [android15-6.6]=gki-android15-6.6
-            [android16-6.12]=gki-android16-6.12
+            [android12-5.10]=7373f8d8cbaee0742d3a18b0ab44d0a51d32cf78
+            [android13-5.15]=415e4143ee1dd557c54d2b3d94ef098e5d1236f4
+            [android14-6.1]=153f88df3be2501d2d33364f8fe05247aecb3cef
+            [android15-6.6]=3f0b811b2e105afd8dc858cd71389090e01f404b
+            [android16-6.12]=b213c54126fb243595ce7876e91d84d6e0861fec
           )
           declare -A resolved_ref=()
           pins='{}'
 
           for family in android12-5.10 android13-5.15 android14-6.1 android15-6.6 android16-6.12; do
+            if [[ ! "${requested_ref[$family]}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::${family} must use an immutable 40-character SuSFS commit, not a branch or tag"
+              exit 1
+            fi
             work=$(mktemp -d)
             git -C "$work" init -q
             git -C "$work" remote add origin "$SUSFS_REPOSITORY"
