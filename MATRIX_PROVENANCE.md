@@ -102,23 +102,22 @@ post-exec control flow. The inline checker is not bypassed, and the workflow
 does not fall back to Hybrid mode. All reviewed 5.10 targets continue to
 require Inline hook mode and seccomp Filter.
 
-## Unified 158-target release workflow
+## Unified 169-target release workflow
 
-`.github/workflows/oneplus-full-158-matrix.yml` is the canonical full release
-entry point. One dispatch validates and builds exactly 158 targets across all
-five supported GKI families: 38 Android 12/5.10, 25 Android 13/5.15, 53 Android
-14/6.1, 34 Android 15/6.6, and 8 Android 16/6.12.
+`.github/workflows/oneplus-full-169-matrix.yml` is the canonical full release
+entry point. It validates exactly 169 target configs matching the WildKernels
+v2.4.0-r1 catalog: 38 Android 12/5.10, 29 Android 13/5.15, 59 Android 14/6.1,
+35 Android 15/6.6 and 8 Android 16/6.12.
 
-The proven `configs/oos16/OP13r-6.1.141.json` device is job 1 and replaces the
-older `configs/a16/OP13r-6.1.118.json` member. The other 157 jobs are gated on
-that pilot succeeding, so an invalid baseline cannot consume the full matrix.
-Every family reference is resolved to an immutable Simonpunk commit before the
-pilot begins, and preparation fails unless its header reports exactly SuSFS
-2.3.0 and its matching family patch exists.
+`configs/a16/OP13r-6.1.141.json` is the only pilot. After it succeeds, the
+ordinary 168-target matrix starts with `configs/a16/OP13r.json`, currently
+resolving to 6.1.157, and then runs the other 167 targets. The prioritized
+6.1.157 target is not treated as a second pilot. Every family reference is an
+immutable Simonpunk commit and preparation fails unless the corresponding
+header and patch both identify SuSFS 2.4.0.
 
-The shared build action remains the sole implementation and release gate. It
-must pass all nine SuSFS capability checks, Inline hook verification, Seccomp
-Filter verification, NostalgiKSU/installer branding checks and artifact audit
-before that target's flashable ZIP is uploaded. The final confirmation job is
-green only when the pilot and all remaining 157 targets are green; partial
-matrices are never reported as complete releases.
+The shared action embeds NostalgiKSU 33182-6 and fails closed unless each ZIP
+uses the canonical `NOSTALGIC-AK3_..._NKSU_33182-6_SuSFS_v2.4.0.zip` name and
+passes its kernel-image, Inline hook, seccomp, required-capability, installer
+and NOSTALGIC branding audits. A release can be published only after the pilot
+and all 168 regular matrix targets succeed; partial matrices remain failures.

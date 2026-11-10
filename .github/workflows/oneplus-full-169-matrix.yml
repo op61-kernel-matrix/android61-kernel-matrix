@@ -1,4 +1,4 @@
-name: OnePlus full 158-target NostalgiKSU matrix
+name: OnePlus full 169-target NostalgiKSU matrix
 
 on:
   workflow_dispatch:
@@ -8,24 +8,34 @@ on:
         required: true
         type: boolean
         default: false
+      make_release:
+        description: Publish the complete 169-kernel GitHub release after every target passes
+        required: true
+        type: boolean
+        default: false
+      release_tag:
+        description: Optional release tag (blank uses nostalgiksu-33182-susfs-v2.4.0-r<run>)
+        required: false
+        type: string
+        default: ""
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: oneplus-full-158-${{ github.ref }}
+  group: oneplus-full-169-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  PILOT_CONFIG: configs/oos16/OP13r-6.1.141.json
-  REPLACED_CONFIG: configs/a16/OP13r-6.1.118.json
+  PILOT_CONFIG: configs/a16/OP13r-6.1.141.json
+  PRIORITY_CONFIG: configs/a16/OP13r.json
   SUSFS_PIN_MANIFEST: configs/susfs-2.4.0-pins.json
   SUSFS_REPOSITORY: https://gitlab.com/simonpunk/susfs4ksu.git
   REQUIRED_SUSFS_VERSION: "2.4.0"
 
 jobs:
   prepare:
-    name: Validate and prepare exact 158-target plan
+    name: Validate and prepare exact 169-target plan
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -81,21 +91,30 @@ jobs:
           done
 
           test -s "$PILOT_CONFIG"
-          jq -e '.android_version == "android14" and .kernel_version == "6.1" and .uname == "8-g88433133-ab68376540"' "$PILOT_CONFIG" >/dev/null
+          jq -e '.model == "OP13r-6.1.141" and
+                 .manifest == "oneplus_13r_6.1.141_w.xml" and
+                 .android_version == "android14" and .kernel_version == "6.1"' \
+            "$PILOT_CONFIG" >/dev/null
 
-          mapfile -t files < <(
+          mapfile -t remaining_files < <(
             find configs/a14 configs/a15 configs/a16 -type f -name '*.json' -print |
               sort |
-              grep -Fvx "$REPLACED_CONFIG"
+              grep -Fvx -e "$PILOT_CONFIG" -e "$PRIORITY_CONFIG"
           )
-          [ "${#files[@]}" -eq 157 ] || {
-            echo "::error::Expected 157 non-pilot configs, found ${#files[@]}"
+          [ "${#remaining_files[@]}" -eq 167 ] || {
+            echo "::error::Expected 167 configs besides the pilot and priority target, found ${#remaining_files[@]}"
             exit 1
           }
+
+          # There is exactly one pilot: OP13R 6.1.141. Once it passes, the
+          # ordinary 168-target matrix begins with the rolling OP13R manifest
+          # (currently 6.1.157), followed by the other 167 reviewed targets.
+          files=("$PRIORITY_CONFIG" "${remaining_files[@]}")
 
           plan=$(mktemp)
           : > "$plan"
           declare -A counts=()
+          sequence=1
           for file in "${files[@]}"; do
             android=$(jq -er '.android_version' "$file")
             kernel=$(jq -er '.kernel_version' "$file")
@@ -106,40 +125,54 @@ jobs:
               *) echo "::error::Unsupported family ${family} in ${file}"; exit 1 ;;
             esac
             counts[$family]=$(( ${counts[$family]:-0} + 1 ))
+            sequence=$((sequence + 1))
             jq -nc --arg config "$file" --arg family "$family" --arg model "$model" \
+              --argjson sequence "$sequence" \
               --arg susfs_version "$REQUIRED_SUSFS_VERSION" \
               --arg susfs_ref "${resolved_ref[$family]}" \
-              '{config:$config,family:$family,model:$model,susfs_version:$susfs_version,susfs_ref:$susfs_ref}' >> "$plan"
+              '{sequence:$sequence,config:$config,family:$family,model:$model,susfs_version:$susfs_version,susfs_ref:$susfs_ref}' >> "$plan"
           done
 
-          # Counts include the OP13R 6.1.141 pilot, which replaces the older
-          # OP13R 6.1.118 member without changing the proven 158-target total.
+          # The matrix already contains the priority 6.1.157 target; add only
+          # the separate 6.1.141 pilot to the family totals.
           counts[android14-6.1]=$(( ${counts[android14-6.1]:-0} + 1 ))
           [ "${counts[android12-5.10]:-0}" -eq 38 ]
-          [ "${counts[android13-5.15]:-0}" -eq 25 ]
-          [ "${counts[android14-6.1]:-0}" -eq 53 ]
-          [ "${counts[android15-6.6]:-0}" -eq 34 ]
+          [ "${counts[android13-5.15]:-0}" -eq 29 ]
+          [ "${counts[android14-6.1]:-0}" -eq 59 ]
+          [ "${counts[android15-6.6]:-0}" -eq 35 ]
           [ "${counts[android16-6.12]:-0}" -eq 8 ]
 
           matrix=$(jq -sc '{include:.}' "$plan")
           echo "matrix=$(jq -c . <<<"$matrix")" >> "$GITHUB_OUTPUT"
-          echo "count=158" >> "$GITHUB_OUTPUT"
+          echo "count=169" >> "$GITHUB_OUTPUT"
           echo "pilot_susfs_ref=${resolved_ref[android14-6.1]}" >> "$GITHUB_OUTPUT"
           echo "susfs_pins=$pins" >> "$GITHUB_OUTPUT"
 
+          # Preserve the exact reviewed 169-config catalog for release notes.
+          find configs/a14 configs/a15 configs/a16 -type f -name '*.json' -print0 |
+            sort -z | xargs -0 jq -s '.' > release-catalog.json
+          [ "$(jq 'length' release-catalog.json)" -eq 169 ]
+
           {
-            echo '## Validated 158-target build plan'
+            echo '## Validated 169-target build plan'
             echo
-            echo '- Pilot first: `configs/oos16/OP13r-6.1.141.json`'
-            echo '- Replaced legacy member: `configs/a16/OP13r-6.1.118.json`'
-            echo '- Families: 5.10=38, 5.15=25, 6.1=53, 6.6=34, 6.12=8'
+            echo '- Sole pilot: `configs/a16/OP13r-6.1.141.json`'
+            echo '- First regular target after pilot: `configs/a16/OP13r.json` (currently 6.1.157)'
+            echo '- Families: 5.10=38, 5.15=29, 6.1=59, 6.6=35, 6.12=8'
             echo '- SuSFS: exactly 2.4.0 on all five immutable family pins'
             echo '- Every device record carries its family, SuSFS version and resolved commit'
             echo "- Resolved pins: \`$pins\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload exact release catalog
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-catalog
+          path: release-catalog.json
+          retention-days: 90
+
   pilot:
-    name: "1/158 PILOT · OP13R 6.1.141"
+    name: "1/169 PILOT · OP13R 6.1.141"
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 360
@@ -170,7 +203,10 @@ jobs:
             --arg commit '${{ needs.prepare.outputs.pilot_susfs_ref }}' \
             '.susfs=true | .susfs_version=$version | .susfs_family=$family | .susfs_commit=$commit' \
             "$PILOT_CONFIG")
-          jq -e '.android_version == "android14" and .kernel_version == "6.1" and .uname == "8-g88433133-ab68376540"' <<<"$JSON" >/dev/null
+          jq -e '.model == "OP13r-6.1.141" and
+                 .manifest == "oneplus_13r_6.1.141_w.xml" and
+                 .android_version == "android14" and .kernel_version == "6.1"' \
+            <<<"$JSON" >/dev/null
           echo "json=$JSON" >> "$GITHUB_OUTPUT"
 
       - name: Build and audit pilot
@@ -196,7 +232,7 @@ jobs:
           bash .github/scripts/audit-nostalgic-ak3.sh "$ZIP_PATH" 'OP13r-6.1.141'
 
   build:
-    name: "${{ matrix.family }} · ${{ matrix.config }}"
+    name: "${{ matrix.sequence }}/169 · ${{ matrix.family }} · ${{ matrix.config }}"
     needs: [prepare, pilot]
     runs-on: ubuntu-24.04
     timeout-minutes: 360
@@ -244,6 +280,18 @@ jobs:
             <<<"$JSON" >/dev/null
           echo "json=$JSON" >> "$GITHUB_OUTPUT"
 
+      - name: Enforce priority OP13R 6.1.157 identity
+        if: ${{ matrix.sequence == 2 }}
+        shell: bash
+        env:
+          CONFIG_PATH: ${{ matrix.config }}
+        run: |
+          set -euo pipefail
+          [ "$CONFIG_PATH" = "$PRIORITY_CONFIG" ]
+          jq -e '.model == "OP13r" and .manifest == "oneplus_13r_w.xml" and
+                 .android_version == "android14" and .kernel_version == "6.1"' \
+            "$CONFIG_PATH" >/dev/null
+
       - name: Build and enforce all nine capabilities
         id: build
         uses: ./.github/actions/build-kernel
@@ -265,10 +313,16 @@ jobs:
           set -euo pipefail
           ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$ZIP_PATH"
+          if [ '${{ matrix.sequence }}' = 2 ]; then
+            case "$ZIP_NAME" in
+              *android14-6.1.157*) ;;
+              *) echo "::error::Priority OP13R manifest did not produce 6.1.157: $ZIP_NAME"; exit 1 ;;
+            esac
+          fi
           bash .github/scripts/audit-nostalgic-ak3.sh "$ZIP_PATH" "$EXPECTED_MODEL"
 
   complete:
-    name: Confirm complete green 158-target release
+    name: Confirm complete green 169-target release
     if: always()
     needs: [prepare, pilot, build]
     runs-on: ubuntu-24.04
@@ -282,8 +336,74 @@ jobs:
           TARGET_COUNT: ${{ needs.prepare.outputs.count }}
         run: |
           set -euo pipefail
-          [ "$TARGET_COUNT" = 158 ]
+          [ "$TARGET_COUNT" = 169 ]
           [ "$PREPARE_RESULT" = success ]
           [ "$PILOT_RESULT" = success ]
           [ "$MATRIX_RESULT" = success ]
-          echo 'All 158 targets passed the build, installer and nine-capability audits.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'All 169 targets passed the build, installer and nine-capability audits.' >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Publish complete 169-kernel release
+    if: ${{ needs.complete.result == 'success' && inputs.make_release == true }}
+    needs: [complete]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download all successful kernel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: NOSTALGIC-AK3_*
+          merge-multiple: true
+
+      - name: Enforce complete release and write notes
+        id: notes
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mapfile -d '' zips < <(find release-assets -maxdepth 1 -type f -name 'NOSTALGIC-AK3_*_NKSU_33182-6_SuSFS_v2.4.0.zip' -print0 | sort -z)
+          [ "${#zips[@]}" -eq 169 ] || {
+            echo "::error::Expected exactly 169 kernel ZIPs, found ${#zips[@]}"
+            exit 1
+          }
+          tag="$REQUESTED_TAG"
+          [ -n "$tag" ] || tag="nostalgiksu-33182-susfs-v2.4.0-r${GITHUB_RUN_NUMBER}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          {
+            echo '# NostalgiKSU OnePlus kernel matrix'
+            echo
+            echo '- **169/169 kernels built and audited**'
+            echo '- **Pilot:** OnePlus 13R Android 16, kernel 6.1.141'
+            echo '- **NostalgiKSU:** 33182-6'
+            echo '- **SuSFS:** 2.4.0 from immutable per-family pins'
+            echo '- **Families:** 5.10=38, 5.15=29, 6.1=59, 6.6=35, 6.12=8'
+            echo '- **Strict checks:** NostalgiKSU flashing banner, bright green #00E676, installer identity, ARM64 image, SuSFS inline hook sites and required capabilities'
+            echo
+            echo '## Kernel downloads'
+            echo
+            echo '| Kernel package | Size | SHA-256 |'
+            echo '|---|---:|---|'
+            for file in "${zips[@]}"; do
+              name=$(basename "$file")
+              size=$(du -h "$file" | awk '{print $1}')
+              sha=$(sha256sum "$file" | awk '{print $1}')
+              url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/${name}"
+              printf '| [%s](%s) | %s | `%s` |\n' "$name" "$url" "$size" "$sha"
+            done
+            echo
+            echo 'Every ZIP is an individual AnyKernel3 flashable package. Keep the stock boot/init_boot image available before testing.'
+          } > release-notes.md
+
+      - name: Publish release and all 169 assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.notes.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" release-assets/NOSTALGIC-AK3_*_NKSU_33182-6_SuSFS_v2.4.0.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "NostalgiKSU 33182 · SuSFS 2.4.0 · 169 OnePlus kernels" \
+            --notes-file release-notes.md
+

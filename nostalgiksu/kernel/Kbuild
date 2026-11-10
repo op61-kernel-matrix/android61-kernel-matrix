@@ -118,7 +118,12 @@ endif
 ifdef KBUILD_EXTMOD
 $(error SUSFS Inline does not support LKM builds)
 endif
-SUSFS_INLINE_CHECK_RESULT := $(shell $(KSU_KERNEL_DIR)/tools/check_susfs_inline.sh "$(srctree)"; echo $$?)
+# KSU_KERNEL_DIR can be relative to the including Kbuild.  That happened to
+# resolve on 5.10-6.6, but breaks when Android 16/6.12 invokes Kbuild from a
+# different directory.  Anchor the verifier to the kernel source root where
+# setup.sh always stages NostalgiKSU.
+SUSFS_INLINE_CHECK := $(srctree)/drivers/kernelsu/tools/check_susfs_inline.sh
+SUSFS_INLINE_CHECK_RESULT := $(shell test -x "$(SUSFS_INLINE_CHECK)" && "$(SUSFS_INLINE_CHECK)" "$(srctree)"; echo $$?)
 ifeq ($(lastword $(SUSFS_INLINE_CHECK_RESULT)),0)
 else
 $(error SUSFS Inline hook-site check failed)

@@ -6,7 +6,7 @@ expected_model=${2:?usage: audit-nostalgic-ak3.sh ZIP_PATH EXPECTED_MODEL}
 zip_name=$(basename "$zip_path")
 
 [[ -s "$zip_path" ]] || { echo "::error::Missing NOSTALGIC-AK3 archive: $zip_path"; exit 1; }
-[[ "$zip_name" == NOSTALGIC-AK3_${expected_model}_*_NKSU_33174-6_SuSFS_v2.4.0.zip ]] || {
+[[ "$zip_name" == NOSTALGIC-AK3_${expected_model}_*_NKSU_33182-6_SuSFS_v2.4.0.zip ]] || {
   echo "::error::Non-canonical kernel archive name: $zip_name"
   exit 1
 }
@@ -34,7 +34,7 @@ grep -Fq 'ui_print "NostalgiKSU"' "$installer"
 grep -Fq 'ui_print "NOSTALGIC Kernel Lab"' "$installer"
 grep -Fq 'OKI Kernel Supported:' "$installer"
 grep -Fq 'Built with love by NOSTALGIC @Reals3s' "$installer"
-grep -Fq 'Core stack: NostalgiKSU 33174-6 + NOSTALGIC SuSFS 2.4.0 GKI-2' "$installer"
+grep -Fq 'Core stack: NostalgiKSU 33182-6 + NOSTALGIC SuSFS 2.4.0 GKI-2' "$installer"
 grep -Fq 'Credits: OnePlus OSS, NostalgiKSU contributors and AnyKernel3.' "$installer"
 
 # Audit only installer-visible text. Upstream branch names and implementation
