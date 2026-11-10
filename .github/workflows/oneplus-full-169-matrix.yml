@@ -95,6 +95,14 @@ jobs:
                  .manifest == "oneplus_13r_6.1.141_w.xml" and
                  .android_version == "android14" and .kernel_version == "6.1"' \
             "$PILOT_CONFIG" >/dev/null
+          pilot_manifest=$(jq -er '.manifest' "$PILOT_CONFIG")
+          pilot_os=$(jq -er '.os_version | ascii_downcase' "$PILOT_CONFIG")
+          if [[ "$pilot_manifest" != https://* ]]; then
+            test -s "manifests/${pilot_os}/${pilot_manifest}" || {
+              echo "::error::Pilot manifest is missing: manifests/${pilot_os}/${pilot_manifest}"
+              exit 1
+            }
+          fi
 
           mapfile -t remaining_files < <(
             find configs/a14 configs/a15 configs/a16 -type f -name '*.json' -print |
@@ -119,6 +127,14 @@ jobs:
             android=$(jq -er '.android_version' "$file")
             kernel=$(jq -er '.kernel_version' "$file")
             model=$(jq -er '.model' "$file")
+            manifest=$(jq -er '.manifest' "$file")
+            os_dir=$(jq -er '.os_version | ascii_downcase' "$file")
+            if [[ "$manifest" != https://* ]]; then
+              test -s "manifests/${os_dir}/${manifest}" || {
+                echo "::error::${file} references missing manifest manifests/${os_dir}/${manifest}"
+                exit 1
+              }
+            fi
             family="${android}-${kernel}"
             case "$family" in
               android12-5.10|android13-5.15|android14-6.1|android15-6.6|android16-6.12) ;;
