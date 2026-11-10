@@ -28,7 +28,7 @@ concurrency:
 
 env:
   PILOT_CONFIG: configs/a16/OP13r-6.1.141.json
-  PRIORITY_CONFIG: configs/a16/OP13r.json
+  FIRST_MATRIX_CONFIG: configs/a16/OP13r.json
   SUSFS_PIN_MANIFEST: configs/susfs-2.4.0-pins.json
   SUSFS_REPOSITORY: https://gitlab.com/simonpunk/susfs4ksu.git
   REQUIRED_SUSFS_VERSION: "2.4.0"
@@ -107,17 +107,18 @@ jobs:
           mapfile -t remaining_files < <(
             find configs/a14 configs/a15 configs/a16 -type f -name '*.json' -print |
               sort |
-              grep -Fvx -e "$PILOT_CONFIG" -e "$PRIORITY_CONFIG"
+              grep -Fvx -e "$PILOT_CONFIG" -e "$FIRST_MATRIX_CONFIG"
           )
           [ "${#remaining_files[@]}" -eq 167 ] || {
-            echo "::error::Expected 167 configs besides the pilot and priority target, found ${#remaining_files[@]}"
+            echo "::error::Expected 167 configs besides the pilot and first matrix target, found ${#remaining_files[@]}"
             exit 1
           }
 
           # There is exactly one pilot: OP13R 6.1.141. Once it passes, the
-          # ordinary 168-target matrix begins with the rolling OP13R manifest
-          # (currently 6.1.157), followed by the other 167 reviewed targets.
-          files=("$PRIORITY_CONFIG" "${remaining_files[@]}")
+          # ordinary 168-target matrix begins with OP13R, followed by the other
+          # 167 reviewed targets. Artifact versions are derived from the pinned
+          # source instead of being assumed here.
+          files=("$FIRST_MATRIX_CONFIG" "${remaining_files[@]}")
 
           plan=$(mktemp)
           : > "$plan"
@@ -149,8 +150,7 @@ jobs:
               '{sequence:$sequence,config:$config,family:$family,model:$model,susfs_version:$susfs_version,susfs_ref:$susfs_ref}' >> "$plan"
           done
 
-          # The matrix already contains the priority 6.1.157 target; add only
-          # the separate 6.1.141 pilot to the family totals.
+          # Add the separate 6.1.141 pilot to the matrix family totals.
           counts[android14-6.1]=$(( ${counts[android14-6.1]:-0} + 1 ))
           [ "${counts[android12-5.10]:-0}" -eq 38 ]
           [ "${counts[android13-5.15]:-0}" -eq 29 ]
@@ -173,7 +173,7 @@ jobs:
             echo '## Validated 169-target build plan'
             echo
             echo '- Sole pilot: `configs/a16/OP13r-6.1.141.json`'
-            echo '- First regular target after pilot: `configs/a16/OP13r.json` (currently 6.1.157)'
+            echo '- First regular target after pilot: `configs/a16/OP13r.json`'
             echo '- Families: 5.10=38, 5.15=29, 6.1=59, 6.6=35, 6.12=8'
             echo '- SuSFS: exactly 2.4.0 on all five immutable family pins'
             echo '- Every device record carries its family, SuSFS version and resolved commit'
@@ -296,18 +296,6 @@ jobs:
             <<<"$JSON" >/dev/null
           echo "json=$JSON" >> "$GITHUB_OUTPUT"
 
-      - name: Enforce priority OP13R 6.1.157 identity
-        if: ${{ matrix.sequence == 2 }}
-        shell: bash
-        env:
-          CONFIG_PATH: ${{ matrix.config }}
-        run: |
-          set -euo pipefail
-          [ "$CONFIG_PATH" = "$PRIORITY_CONFIG" ]
-          jq -e '.model == "OP13r" and .manifest == "oneplus_13r_w.xml" and
-                 .android_version == "android14" and .kernel_version == "6.1"' \
-            "$CONFIG_PATH" >/dev/null
-
       - name: Build and enforce all nine capabilities
         id: build
         uses: ./.github/actions/build-kernel
@@ -329,12 +317,6 @@ jobs:
           set -euo pipefail
           ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$ZIP_PATH"
-          if [ '${{ matrix.sequence }}' = 2 ]; then
-            case "$ZIP_NAME" in
-              *android14-6.1.157*) ;;
-              *) echo "::error::Priority OP13R manifest did not produce 6.1.157: $ZIP_NAME"; exit 1 ;;
-            esac
-          fi
           bash .github/scripts/audit-nostalgic-ak3.sh "$ZIP_PATH" "$EXPECTED_MODEL"
 
   complete:
