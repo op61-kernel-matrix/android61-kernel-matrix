@@ -537,6 +537,16 @@ runs:
         fi
         
         [ "$CLANG_FOUND" = true ] || { echo "::error::No clang toolchain found"; exit 1; }
+
+        # LLVM=1 requires the complete matching tool suite. Never accept an
+        # incomplete system-Clang fallback and fail later with misleading
+        # llvm-ar/llvm-nm errors in the kernel build.
+        for tool in clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-strip; do
+          if [ ! -x "$CLANG_BIN/$tool" ]; then
+            echo "::error::Incomplete LLVM toolchain: $CLANG_BIN/$tool is missing"
+            exit 1
+          fi
+        done
         
         echo "CLANG_BIN_PATH=$CLANG_BIN" >> "$GITHUB_ENV"
         

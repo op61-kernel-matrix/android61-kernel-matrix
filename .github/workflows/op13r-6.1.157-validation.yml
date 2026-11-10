@@ -1,0 +1,80 @@
+name: Validate OP13R 6.1.157 NostalgiKSU
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: op13r-6.1.157-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: OP13R 6.1.157 · NostalgiKSU 33197 · SuSFS 2.4.0
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout matrix controller
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential clang lld flex bison \
+            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+            libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+            dos2unix kmod libdw-dev elfutils pigz zip patch aria2 cpio zstd
+
+      - name: Lock exact target and SuSFS pin
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          config=configs/a16/OP13r.json
+          pin=$(jq -er '.families["android14-6.1"]' configs/susfs-2.4.0-pins.json)
+          jq -e '.model == "OP13r-6.1.157" and
+                 .manifest == "oneplus_13r_6.1.157_w.xml"' "$config" >/dev/null
+          grep -qF 'revision="7a7ae28e849b0f9b42b8b6fc26feebe1864bf7ac"' \
+            manifests/a16/oneplus_13r_6.1.157_w.xml
+          grep -qF 'revision="28b975ada54f8610ed531a6b57253aed10e7c87d"' \
+            manifests/a16/oneplus_13r_6.1.157_w.xml
+          json=$(jq -c --arg pin "$pin" \
+            '.susfs=true | .susfs_version="2.4.0" |
+             .susfs_family="android14-6.1" | .susfs_commit=$pin' "$config")
+          echo "json=$json" >> "$GITHUB_OUTPUT"
+          echo "pin=$pin" >> "$GITHUB_OUTPUT"
+
+      - name: Build and enforce all capabilities
+        id: build
+        uses: ./.github/actions/build-kernel
+        with:
+          op_config_json: ${{ steps.config.outputs.json }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          ksu_type: NostalgiKSU
+          susfs_commit_hash_or_branch: ${{ steps.config.outputs.pin }}
+          optimize_level: O2
+          clean: true
+          debug: true
+
+      - name: Enforce final OP13R 6.1.157 artifact
+        shell: bash
+        env:
+          ZIP_NAME: ${{ steps.build.outputs.zip_name }}
+          KERNEL_VERSION: ${{ steps.build.outputs.kernel_version }}
+          KSU_VERSION: ${{ steps.build.outputs.ksu_version }}
+          SUSFS_VERSION: ${{ steps.build.outputs.susfs_version }}
+        run: |
+          set -euo pipefail
+          [ "$KERNEL_VERSION" = "android14-6.1.157" ]
+          [ "$KSU_VERSION" = "33197-6" ]
+          [ "$SUSFS_VERSION" = "v2.4.0" ]
+          zip_path=$(find . -type f -name "$ZIP_NAME" -print -quit)
+          test -n "$zip_path"
+          bash .github/scripts/audit-nostalgic-ak3.sh "$zip_path" 'OP13r-6.1.157'
