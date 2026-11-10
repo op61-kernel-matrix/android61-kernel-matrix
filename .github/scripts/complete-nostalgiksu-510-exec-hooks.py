@@ -122,4 +122,4 @@ missing = [name for name in required if name not in text]
 if missing:
     raise SystemExit(f"failed to install final NostalgiKSU exec hooks: {missing}")
 path.write_text(text)
-print("Installed NostalgiKSU 33182 Android 5.10 exec hook contract")
+print("Installed NostalgiKSU 33197 Android 5.10 exec hook contract")

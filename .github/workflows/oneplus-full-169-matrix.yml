@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
       release_tag:
-        description: Optional release tag (blank uses nostalgiksu-33182-susfs-v2.4.0-r<run>)
+        description: Optional release tag (blank uses nostalgiksu-33197-susfs-v2.4.0-r<run>)
         required: false
         type: string
         default: ""
@@ -104,6 +104,16 @@ jobs:
             }
           fi
 
+          test -s "$FIRST_MATRIX_CONFIG"
+          jq -e '.model == "OP13r-6.1.157" and
+                 .manifest == "oneplus_13r_6.1.157_w.xml" and
+                 .android_version == "android14" and .kernel_version == "6.1"' \
+            "$FIRST_MATRIX_CONFIG" >/dev/null
+          grep -qF 'revision="7a7ae28e849b0f9b42b8b6fc26feebe1864bf7ac"' \
+            manifests/a16/oneplus_13r_6.1.157_w.xml
+          grep -qF 'revision="a38d33feb96867ebd75e555f21e81c7b276b9b4f"' \
+            manifests/a16/oneplus_13r_6.1.157_w.xml
+
           mapfile -t remaining_files < <(
             find configs/a14 configs/a15 configs/a16 -type f -name '*.json' -print |
               sort |
@@ -114,10 +124,9 @@ jobs:
             exit 1
           }
 
-          # There is exactly one pilot: OP13R 6.1.141. Once it passes, the
-          # ordinary 168-target matrix begins with OP13R, followed by the other
-          # 167 reviewed targets. Artifact versions are derived from the pinned
-          # source instead of being assumed here.
+          # The pilot and all regular targets start independently. Target 2 is
+          # the separately pinned OP13R 6.1.157 source; it is never inferred
+          # from the pilot or from a filename assertion.
           files=("$FIRST_MATRIX_CONFIG" "${remaining_files[@]}")
 
           plan=$(mktemp)
@@ -173,7 +182,7 @@ jobs:
             echo '## Validated 169-target build plan'
             echo
             echo '- Sole pilot: `configs/a16/OP13r-6.1.141.json`'
-            echo '- First regular target after pilot: `configs/a16/OP13r.json`'
+            echo '- Target 2 (runs concurrently): `configs/a16/OP13r.json` = OP13R 6.1.157'
             echo '- Families: 5.10=38, 5.15=29, 6.1=59, 6.6=35, 6.12=8'
             echo '- SuSFS: exactly 2.4.0 on all five immutable family pins'
             echo '- Every device record carries its family, SuSFS version and resolved commit'
@@ -249,7 +258,7 @@ jobs:
 
   build:
     name: "${{ matrix.sequence }}/169 · ${{ matrix.family }} · ${{ matrix.config }}"
-    needs: [prepare, pilot]
+    needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
@@ -360,20 +369,20 @@ jobs:
           REQUESTED_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          mapfile -d '' zips < <(find release-assets -maxdepth 1 -type f -name 'NOSTALGIC-AK3_*_NKSU_33182-6_SuSFS_v2.4.0.zip' -print0 | sort -z)
+          mapfile -d '' zips < <(find release-assets -maxdepth 1 -type f -name 'NOSTALGIC-AK3_*_NKSU_33197-6_SuSFS_v2.4.0.zip' -print0 | sort -z)
           [ "${#zips[@]}" -eq 169 ] || {
             echo "::error::Expected exactly 169 kernel ZIPs, found ${#zips[@]}"
             exit 1
           }
           tag="$REQUESTED_TAG"
-          [ -n "$tag" ] || tag="nostalgiksu-33182-susfs-v2.4.0-r${GITHUB_RUN_NUMBER}"
+          [ -n "$tag" ] || tag="nostalgiksu-33197-susfs-v2.4.0-r${GITHUB_RUN_NUMBER}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           {
             echo '# NostalgiKSU OnePlus kernel matrix'
             echo
             echo '- **169/169 kernels built and audited**'
             echo '- **Pilot:** OnePlus 13R Android 16, kernel 6.1.141'
-            echo '- **NostalgiKSU:** 33182-6'
+            echo '- **NostalgiKSU:** 33197-6'
             echo '- **SuSFS:** 2.4.0 from immutable per-family pins'
             echo '- **Families:** 5.10=38, 5.15=29, 6.1=59, 6.6=35, 6.12=8'
             echo '- **Strict checks:** NostalgiKSU flashing banner, bright green #00E676, installer identity, ARM64 image, SuSFS inline hook sites and required capabilities'
@@ -400,8 +409,8 @@ jobs:
           TAG: ${{ steps.notes.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" release-assets/NOSTALGIC-AK3_*_NKSU_33182-6_SuSFS_v2.4.0.zip \
+          gh release create "$TAG" release-assets/NOSTALGIC-AK3_*_NKSU_33197-6_SuSFS_v2.4.0.zip \
             --repo "$GITHUB_REPOSITORY" \
-            --title "NostalgiKSU 33182 · SuSFS 2.4.0 · 169 OnePlus kernels" \
+            --title "NostalgiKSU 33197 · SuSFS 2.4.0 · 169 OnePlus kernels" \
             --notes-file release-notes.md
 

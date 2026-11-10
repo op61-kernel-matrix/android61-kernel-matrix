@@ -1007,26 +1007,30 @@ runs:
         echo "✅ BakaSU added (commit: ${KSU_COMMIT_SHA:0:8})"
         echo "::endgroup::"
 
-    - name: Add device-verified NostalgiKSU 33182-6
+    - name: Add device-verified NostalgiKSU 33197-6
       shell: bash
       if: ${{ inputs.ksu_type == 'NostalgiKSU' }}
       run: |
         set -euo pipefail
-        echo "::group::Add device-verified NostalgiKSU 33182-6"
+        echo "::group::Add device-verified NostalgiKSU 33197-6"
         cd "$KERNEL_PLATFORM_FOLDER"
         rm -rf KernelSU
         mkdir -p KernelSU
         cp -a "$GITHUB_WORKSPACE/nostalgiksu/kernel" KernelSU/kernel
         cp -a "$GITHUB_WORKSPACE/nostalgiksu/uapi" KernelSU/uapi
+        jq -e '.version_code == 33197 and
+               .version == "v1.6.0-3-g1fdd083f" and
+               .upstream_commit == "1fdd083f348fb92452ca2f85ab2f78c929f84247"' \
+          "$GITHUB_WORKSPACE/nostalgiksu/upstream-core.json" >/dev/null
         test -f KernelSU/kernel/supercall/dispatch.c
         test -f KernelSU/kernel/extension/susfs.c
         test -L KernelSU/kernel/include/uapi
 
         # Pin the exact kernel ABI and stable signing identity validated by the
-        # device-tested run-64 manager. CI must never substitute another
+        # device-tested run-65 manager. CI must never substitute another
         # KernelSU fork or merely relabel an older NostalgiKSU source.
-        sed -i '1i FINASU_TRUSTED_SIZE := 0x515\nFINASU_TRUSTED_HASH := ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456\nKSU_VERSION_FULL_OVERRIDE := v1.5.2-33182-9414707c@ci\nKSU_VERSION_OVERRIDE := 33182' KernelSU/kernel/Kbuild
-        KSU_COMMIT_SHA=9414707c3e9171ece4b8df44af229a7617a603d8
+        sed -i '1i FINASU_TRUSTED_SIZE := 0x515\nFINASU_TRUSTED_HASH := ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456\nKSU_VERSION_FULL_OVERRIDE := v1.6.0-3-g1fdd083f-33197-1fdd083f@ci\nKSU_VERSION_OVERRIDE := 33197' KernelSU/kernel/Kbuild
+        KSU_COMMIT_SHA=1fdd083f348fb92452ca2f85ab2f78c929f84247
 
         DRIVER_DIR="$COMMON_KERNEL_FOLDER/drivers"
         ln -sfn "$(realpath --relative-to="$DRIVER_DIR" "$KERNEL_PLATFORM_FOLDER/KernelSU/kernel")" "$DRIVER_DIR/kernelsu"
@@ -1040,9 +1044,9 @@ runs:
         EOF
 
         echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> "$GITHUB_ENV"
-        echo "KSUVER=33182-6" >> "$GITHUB_ENV"
+        echo "KSUVER=33197-6" >> "$GITHUB_ENV"
         echo "NostalgiKSU" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
-        echo "33182-6" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
+        echo "33197-6" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
         echo "NostalgiKSU source: $KSU_COMMIT_SHA"
         echo "::endgroup::"
 
@@ -1227,13 +1231,18 @@ runs:
         echo "Applying SUSFS patch: $SUSFS_KERNEL_PATCH"
         # Attempt to apply the patch; enter error handling if it doesn't apply cleanly
         if ! patch -p1 --forward < "$SUSFS_KERNEL_PATCH"; then
-          echo "Patch reported errors. Checking for known mm/memory.c Hunk #1 context mismatch..."
+          echo "Patch reported errors. Auditing every reject against strict source-layout rules..."
           
           # If mm/memory.c.rej exists and is caused by the SUSFS macro insertion failure
-          if [ -f mm/memory.c.rej ] && grep -q 'CONFIG_KSU_SUSFS_SUS_MAP' mm/memory.c.rej; then
+          if [ -f mm/memory.c.rej ] && \
+             [ "$(grep -c '^@@ ' mm/memory.c.rej)" -eq 1 ] && \
+             grep -q 'CONFIG_KSU_SUSFS_SUS_MAP' mm/memory.c.rej && \
+             grep -q 'linux/susfs_def.h' mm/memory.c.rej; then
             echo "Manually injecting SUSFS headers into mm/memory.c..."
             # Bypass context checks and forcefully inject the code right below vmalloc.h
-            sed -i '/#include <linux\/vmalloc.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n#include <linux\/susfs_def.h>\n#endif \/\/ #ifdef CONFIG_KSU_SUSFS_SUS_MAP' mm/memory.c
+            if ! grep -qxF '#include <linux/susfs_def.h>' mm/memory.c; then
+              sed -i '/#include <linux\/vmalloc.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n#include <linux\/susfs_def.h>\n#endif \/\/ #ifdef CONFIG_KSU_SUSFS_SUS_MAP' mm/memory.c
+            fi
             
             # We have manually fixed Hunk #1, so safely remove this reject file
             rm mm/memory.c.rej
@@ -1243,6 +1252,7 @@ runs:
           # so the SUSFS include/declaration hunk can miss its context even
           # though the rest of the patch applies cleanly.
           if [ -f fs/namespace.c.rej ] && \
+             [ "$(grep -c '^@@ ' fs/namespace.c.rej)" -eq 1 ] && \
              grep -q 'CONFIG_KSU_SUSFS_SUS_MOUNT' fs/namespace.c.rej && \
              grep -q 'CL_COPY_MNT_NS' fs/namespace.c.rej; then
             echo "Manually injecting SUSFS headers into fs/namespace.c..."
@@ -1258,6 +1268,7 @@ runs:
           # Some vendor 5.15 trees also omit trace/hooks/mm.h, causing only
           # the SUSFS task_mmu include hunk to miss its context.
           if [ -f fs/proc/task_mmu.c.rej ] && \
+             [ "$(grep -c '^@@ ' fs/proc/task_mmu.c.rej)" -eq 1 ] && \
              grep -q 'CONFIG_KSU_SUSFS_OPEN_REDIRECT' fs/proc/task_mmu.c.rej && \
              grep -q 'linux/susfs_def.h' fs/proc/task_mmu.c.rej; then
             echo "Manually injecting SUSFS headers into fs/proc/task_mmu.c..."
@@ -1360,7 +1371,14 @@ runs:
             find . -name "*.rej" -exec echo "=== {} ===" \; -exec cat {} \;
             exit 1
           else
-            echo "Patch applied successfully with manual fallback for mm/memory.c!"
+            # A handled reject is permitted only for a declaration/include
+            # hunk. Verify the exact injected contracts before continuing;
+            # every functional SuSFS hook hunk must have applied normally.
+            grep -qF '#include <linux/susfs_def.h>' mm/memory.c
+            grep -qF '#include <linux/susfs_def.h>' fs/namespace.c
+            grep -qF '#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */' fs/namespace.c
+            grep -qF '#include <linux/susfs_def.h>' fs/proc/task_mmu.c
+            echo "SuSFS patch accepted only audited source-layout compatibility fallbacks; no unhandled hunk remains."
           fi
         fi
 
@@ -1371,7 +1389,7 @@ runs:
         if [ "${{ env.ANDROID_VER }}" = "android12" ] && \
            [ "${{ env.KERNEL_VER }}" = "5.10" ] && \
            [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          echo "Completing NostalgiKSU 33182 exec hooks for Android 12 / 5.10..."
+          echo "Completing NostalgiKSU 33197 exec hooks for Android 12 / 5.10..."
           python3 "$GITHUB_WORKSPACE/.github/scripts/complete-nostalgiksu-510-exec-hooks.py" fs/exec.c
         fi
 
@@ -2783,9 +2801,9 @@ runs:
           done
         fi
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          grep -qF '33182' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33182 marker missing"; exit 1; }
-          grep -qF 'v1.5.2-33182-9414707c@ci' "$IMAGE_STRINGS" || { echo "::error::Verified NostalgiKSU 33182 source marker missing"; exit 1; }
-          grep -qF 'ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456' "$IMAGE_STRINGS" || { echo "::error::Validated run-64 manager certificate missing"; exit 1; }
+          grep -qF '33197' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33197 marker missing"; exit 1; }
+          grep -qF 'v1.6.0-3-g1fdd083f-33197-1fdd083f@ci' "$IMAGE_STRINGS" || { echo "::error::Verified NostalgiKSU 33197 source marker missing"; exit 1; }
+          grep -qF 'ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456' "$IMAGE_STRINGS" || { echo "::error::Validated run-65 manager certificate missing"; exit 1; }
           if grep -qiE 'OP-BAKASU|huangdihd|ReSukiSU' "$IMAGE_STRINGS"; then
             echo "::error::Foreign visible kernel branding found in Image"
             exit 1
@@ -2970,7 +2988,7 @@ runs:
         ZIP_MODEL="$OP_MODEL"
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
           test -n "${SUSVER:-}"
-          ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33182-6_SuSFS_${SUSVER}.zip"
+          ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33197-6_SuSFS_${SUSVER}.zip"
         elif [ "${{ env.OP_SUSFS }}" = true ]; then
           ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_${{ inputs.ksu_type }}_${KSUVER:-unknown}_SuSFS_${SUSVER:-unknown}.zip"
         else

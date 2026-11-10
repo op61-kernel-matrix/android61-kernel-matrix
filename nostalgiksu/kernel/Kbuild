@@ -111,6 +111,15 @@ endif
 
 ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include
 
+ifeq ($(CONFIG_KSU_SUSFS),y)
+# SUSFS v2.4.0 makes the driver register the types and allow rules it injects.
+# Earlier patch sets have no such entry points, so the call sites are compiled out.
+SUSFS_REGISTRATION_PROBE := $(shell grep -q 'susfs_add_sus_type' $(srctree)/fs/susfs.c 2>/dev/null; echo $$?)
+ifeq ($(SUSFS_REGISTRATION_PROBE),0)
+ccflags-y += -DKSU_SUSFS_HAS_TYPE_REGISTRATION=1
+endif
+endif
+
 ifdef CONFIG_KSU_HOOK_SUSFS_INLINE
 ifneq ($(CONFIG_KSU_SUSFS),y)
 $(error SUSFS Inline requires CONFIG_KSU_SUSFS=y)
@@ -143,9 +152,13 @@ KSU_RUNNER_CFLAGS := $(CLANG_FLAGS) -std=gnu11 -Os -Wall \
 	-fno-asynchronous-unwind-tables -fno-unwind-tables \
 	-ffunction-sections -fdata-sections
 
+# Keep the embedded PID-1 runner loadable on every supported kernel page size.
+KSU_RUNNER_LDFLAGS := -static -nostdlib -e _start --gc-sections -s \
+	-z max-page-size=0x10000 -z noseparate-code
+
 quiet_cmd_ksu_runner = RUNNER  $@
       cmd_ksu_runner = $(CC) $(KSU_RUNNER_CFLAGS) -c -o $@.o $< && \
-		$(LD) -static -nostdlib -e _start --gc-sections -s -o $@ $@.o && \
+		$(LD) $(KSU_RUNNER_LDFLAGS) -o $@ $@.o && \
 		rm -f $@.o
 
 $(obj)/preinit/runner.elf: $(KSU_KERNEL_DIR)/preinit/runner/runner.c \
