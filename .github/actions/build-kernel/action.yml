@@ -2863,6 +2863,26 @@ runs:
         mv "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt" "$AK3_FOLDER/"
         cd "$AK3_FOLDER"
 
+        # Apply the BBG menu to the pristine, pinned AnyKernel3 source. The
+        # NOSTALGIC transformations below intentionally insert lines around
+        # split_boot, so applying this source patch afterward cannot match its
+        # original context.
+        if [ "$OP_BBG" = "true" ]; then
+          case "$OP_BRANCH" in
+            wild/sm8850|wild/sm8845)
+              echo "Adding BBG efisp/abl allowlist selection menu"
+              BBG_SELECTION_PATCH="$GITHUB_ACTION_PATH/patches/enable-bbg-efisp-selection.patch"
+              if [ ! -s "$BBG_SELECTION_PATCH" ]; then
+                echo "::error::Required BBG installer patch is missing: $BBG_SELECTION_PATCH"
+                exit 1
+              fi
+              patch -p1 < "$BBG_SELECTION_PATCH"
+              grep -Fq 'read_volume_key()' anykernel.sh
+              grep -Fq 'patch_cmdline "oplusboot.secure_user_mode"' anykernel.sh
+              ;;
+          esac
+        fi
+
         # NOSTALGIC-AK3 keeps the proven OnePlus boot/slot implementation from
         # the source AnyKernel3 tree, while giving the pilot an installer identity
         # that is independent of both the upstream kernel and ReSuSFS projects.
@@ -2983,20 +3003,6 @@ runs:
           exit 1
         fi
 
-        if [ "$OP_BBG" = "true" ]; then
-          case "$OP_BRANCH" in
-            wild/sm8850|wild/sm8845)
-              echo "Adding BBG efisp/abl allowlist selection menu"
-              BBG_SELECTION_PATCH="$GITHUB_ACTION_PATH/patches/enable-bbg-efisp-selection.patch"
-              if [ ! -s "$BBG_SELECTION_PATCH" ]; then
-                echo "::error::Required BBG installer patch is missing: $BBG_SELECTION_PATCH"
-                exit 1
-              fi
-              patch -p1 < "$BBG_SELECTION_PATCH"
-              ;;
-          esac
-        fi
-        
         # Keep the exact config model in the artifact name. Stripping a trailing
         # kernel version made distinct matrix entries overwrite each other when
         # they resolved to the same full kernel version.
