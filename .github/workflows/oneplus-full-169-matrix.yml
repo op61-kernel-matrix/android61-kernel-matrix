@@ -213,12 +213,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get -o Acquire::Retries=3 update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git curl ca-certificates build-essential clang lld flex bison \
-            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-            libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
-            dos2unix kmod libdw-dev elfutils pigz zip patch aria2 cpio zstd
+          for attempt in 1 2 3 4; do
+            if sudo apt-get \
+                -o Acquire::Retries=5 \
+                -o Acquire::http::Timeout=60 \
+                -o Acquire::https::Timeout=60 \
+                -o Dpkg::Lock::Timeout=300 \
+                update -qq && \
+              sudo DEBIAN_FRONTEND=noninteractive apt-get \
+                -o Acquire::Retries=5 \
+                -o Acquire::http::Timeout=60 \
+                -o Acquire::https::Timeout=60 \
+                -o Dpkg::Lock::Timeout=300 \
+                install -y --no-install-recommends \
+                  git curl ca-certificates build-essential clang lld flex bison \
+                  libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+                  libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+                  dos2unix kmod libdw-dev elfutils pigz zip patch aria2 cpio zstd; then
+              break
+            fi
+            [ "$attempt" -lt 4 ] || exit 1
+            echo "Dependency installation attempt $attempt failed; retrying..."
+            sleep $((attempt * 15))
+          done
 
       - name: Load and lock proven OP13R pilot
         id: config
@@ -277,12 +294,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get -o Acquire::Retries=3 update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git curl ca-certificates build-essential clang lld flex bison \
-            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-            libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
-            dos2unix kmod libdw-dev elfutils pigz zip patch aria2 cpio zstd
+          for attempt in 1 2 3 4; do
+            if sudo apt-get \
+                -o Acquire::Retries=5 \
+                -o Acquire::http::Timeout=60 \
+                -o Acquire::https::Timeout=60 \
+                -o Dpkg::Lock::Timeout=300 \
+                update -qq && \
+              sudo DEBIAN_FRONTEND=noninteractive apt-get \
+                -o Acquire::Retries=5 \
+                -o Acquire::http::Timeout=60 \
+                -o Acquire::https::Timeout=60 \
+                -o Dpkg::Lock::Timeout=300 \
+                install -y --no-install-recommends \
+                  git curl ca-certificates build-essential clang lld flex bison \
+                  libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+                  libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+                  dos2unix kmod libdw-dev elfutils pigz zip patch aria2 cpio zstd; then
+              break
+            fi
+            [ "$attempt" -lt 4 ] || exit 1
+            echo "Dependency installation attempt $attempt failed; retrying..."
+            sleep $((attempt * 15))
+          done
+
+      - name: Fix NostalgiKSU include root on Android 16 / 6.12
+        if: ${{ matrix.family == 'android16-6.12' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >> nostalgiksu/kernel/Kbuild <<'EOF'
+
+          # Android 16 / 6.12 may expose $(src) as an output-tree path. Anchor
+          # the built-in driver includes to the source-tree location staged by CI.
+          ccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include
+          EOF
 
       - name: Load reviewed target and force SuSFS
         id: config
