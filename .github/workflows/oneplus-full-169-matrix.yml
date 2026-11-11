@@ -3,6 +3,11 @@ name: OnePlus full 169-target NostalgiKSU matrix
 on:
   workflow_dispatch:
     inputs:
+      repair_failed_nine:
+        description: Rebuild only the nine failed targets from run 42908636575 after validating the full 169-target catalog
+        required: true
+        type: boolean
+        default: false
       debug:
         description: Upload diagnostic artifacts for every target
         required: true
@@ -169,9 +174,28 @@ jobs:
           [ "${counts[android15-6.6]:-0}" -eq 35 ]
           [ "${counts[android16-6.12]:-0}" -eq 8 ]
 
+          target_count=169
+          if [ "${{ inputs.repair_failed_nine }}" = true ]; then
+            repair_plan=$(mktemp)
+            jq -c 'select(
+              .config == "configs/a16/OP-ACE-6-ULTRA.json" or
+              .config == "configs/a16/OP-ACE-6T.json" or
+              .config == "configs/a16/OP-PAD-3-PRO.json" or
+              .config == "configs/a16/OP-PAD-4.json" or
+              .config == "configs/a16/OP-PAD-LITE.json" or
+              .config == "configs/a16/OP13r-6.1.118.json" or
+              .config == "configs/a16/OP15.json" or
+              .config == "configs/a16/OP15T.json" or
+              .config == "configs/a16/OP15r.json"
+            )' "$plan" > "$repair_plan"
+            [ "$(wc -l < "$repair_plan")" -eq 9 ]
+            plan="$repair_plan"
+            target_count=9
+          fi
+
           matrix=$(jq -sc '{include:.}' "$plan")
           echo "matrix=$(jq -c . <<<"$matrix")" >> "$GITHUB_OUTPUT"
-          echo "count=169" >> "$GITHUB_OUTPUT"
+          echo "count=$target_count" >> "$GITHUB_OUTPUT"
           echo "pilot_susfs_ref=${resolved_ref[android14-6.1]}" >> "$GITHUB_OUTPUT"
           echo "susfs_pins=$pins" >> "$GITHUB_OUTPUT"
 
@@ -200,6 +224,7 @@ jobs:
 
   pilot:
     name: "1/169 PILOT · OP13R 6.1.141"
+    if: ${{ !inputs.repair_failed_nine }}
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 360
@@ -389,17 +414,24 @@ jobs:
           PILOT_RESULT: ${{ needs.pilot.result }}
           MATRIX_RESULT: ${{ needs.build.result }}
           TARGET_COUNT: ${{ needs.prepare.outputs.count }}
+          REPAIR_FAILED_NINE: ${{ inputs.repair_failed_nine }}
         run: |
           set -euo pipefail
-          [ "$TARGET_COUNT" = 169 ]
           [ "$PREPARE_RESULT" = success ]
-          [ "$PILOT_RESULT" = success ]
           [ "$MATRIX_RESULT" = success ]
-          echo 'All 169 targets passed the build, installer and nine-capability audits.' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$REPAIR_FAILED_NINE" = true ]; then
+            [ "$TARGET_COUNT" = 9 ]
+            [ "$PILOT_RESULT" = skipped ]
+            echo 'All nine recovery targets passed the build, installer and nine-capability audits.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            [ "$TARGET_COUNT" = 169 ]
+            [ "$PILOT_RESULT" = success ]
+            echo 'All 169 targets passed the build, installer and nine-capability audits.' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   release:
     name: Publish complete 169-kernel release
-    if: ${{ needs.complete.result == 'success' && inputs.make_release == true }}
+    if: ${{ needs.complete.result == 'success' && inputs.make_release == true && !inputs.repair_failed_nine }}
     needs: [complete]
     runs-on: ubuntu-24.04
     steps:
