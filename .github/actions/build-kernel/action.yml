@@ -2987,7 +2987,12 @@ runs:
           case "$OP_BRANCH" in
             wild/sm8850|wild/sm8845)
               echo "Adding BBG efisp/abl allowlist selection menu"
-              patch -p1 < "$GITHUB_ACTION_PATH/patches/enable-bbg-efisp-selection.patch"
+              BBG_SELECTION_PATCH="$GITHUB_ACTION_PATH/patches/enable-bbg-efisp-selection.patch"
+              if [ ! -s "$BBG_SELECTION_PATCH" ]; then
+                echo "::error::Required BBG installer patch is missing: $BBG_SELECTION_PATCH"
+                exit 1
+              fi
+              patch -p1 < "$BBG_SELECTION_PATCH"
               ;;
           esac
         fi
