@@ -1381,13 +1381,18 @@ runs:
             find . -name "*.rej" -exec echo "=== {} ===" \; -exec cat {} \;
             exit 1
           else
-            # A handled reject is permitted only for a declaration/include
-            # hunk. Verify the exact injected contracts before continuing;
-            # every functional SuSFS hook hunk must have applied normally.
+            # Verify every source-aware compatibility contract before
+            # continuing. This includes both header/declaration adaptations
+            # and the legacy 6.12 smaps filtering implementation.
             grep -qF '#include <linux/susfs_def.h>' mm/memory.c
             grep -qF '#include <linux/susfs_def.h>' fs/namespace.c
             grep -qF '#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */' fs/namespace.c
+            grep -qF '#include <linux/susfs_def.h>' fs/exec.c
             grep -qF '#include <linux/susfs_def.h>' fs/proc/task_mmu.c
+            if [ "${{ env.ANDROID_VER }}" = "android16" ] && [ "${{ env.KERNEL_VER }}" = "6.12" ]; then
+              [ "$(grep -Fc '!SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file))' fs/proc/task_mmu.c)" -eq 3 ]
+              grep -qF 'if (vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))' fs/proc/task_mmu.c
+            fi
             echo "SuSFS patch accepted only audited source-layout compatibility fallbacks; no unhandled hunk remains."
           fi
         fi
@@ -1862,21 +1867,30 @@ runs:
           exit 1
         fi
         
-        if [ "$(printf '%s\n' "$KERNEL_VERSION" "$MIN_VERSION" | sort -V | head -n1)" = "$KERNEL_VERSION" ]; then
-          echo "Patching clear_page_16bytes_align.patch"
-          if ! patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/common/clear_page_16bytes_align.patch"; then
-            echo "::warning::clear_page_16bytes_align patch did not apply cleanly. Continuing without it (alignment optimization only)."
-            find . -name "*.rej" -exec echo "=== {} ===" \; -exec cat {} \;
-            find . -name "*.rej" -delete 2>/dev/null || true
-          fi
-        else
-          echo "Patching clear_page_16bytes_align.patch (sed variant)"
-          if ! cat "$KERNEL_PATCHES_FOLDER/common/clear_page_16bytes_align.patch" | sed -e 's/SYM_FUNC_START_PI(clear_page)/SYM_FUNC_START_PI(__pi_clear_page)/' | patch -p1 --fuzz=2 --forward; then
-            echo "::warning::clear_page_16bytes_align (sed variant) patch did not apply cleanly. Continuing without it (alignment optimization only)."
-            find . -name "*.rej" -exec echo "=== {} ===" \; -exec cat {} \;
-            find . -name "*.rej" -delete 2>/dev/null || true
-          fi
-        fi
+        echo "Applying clear_page 16-byte alignment at the kernel's stable symbol anchor"
+        python3 - arch/arm64/lib/clear_page.S <<'PY'
+        import sys
+        from pathlib import Path
+
+        path = Path(sys.argv[1])
+        lines = path.read_text().splitlines()
+        anchors = (
+            "SYM_FUNC_START_PI(clear_page)",
+            "SYM_FUNC_START_PI(__pi_clear_page)",
+        )
+        indexes = [index for index, line in enumerate(lines) if line.strip() in anchors]
+        if len(indexes) != 1:
+            raise SystemExit(f"expected one clear_page symbol anchor, found {len(indexes)}")
+
+        index = indexes[0]
+        previous = index - 1
+        while previous >= 0 and not lines[previous].strip():
+            previous -= 1
+        if previous < 0 or lines[previous].strip() != ".p2align 4":
+            lines.insert(index, "\t.p2align 4")
+        path.write_text("\n".join(lines) + "\n")
+        PY
+        grep -qF '.p2align 4' arch/arm64/lib/clear_page.S
         
         
         echo "Patching add_limitation_scaling_min_freq.patch"
