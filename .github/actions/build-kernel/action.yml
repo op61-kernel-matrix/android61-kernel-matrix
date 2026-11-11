@@ -1153,6 +1153,15 @@ runs:
             exit 1
             ;;
         esac
+
+        echo "::endgroup::"
+
+    - name: Prepare SUSFS Kernel Compatibility
+      shell: bash
+      if: ${{ env.OP_SUSFS == 'true' }}
+      run: |
+        set -euo pipefail
+        echo "::group::Prepare SUSFS kernel compatibility"
         
         cd "$COMMON_KERNEL_FOLDER"
         if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
@@ -1238,6 +1247,23 @@ runs:
           exit 1
         fi
 
+        # Preserve source-layout state for the patch and finalization steps.
+        {
+          echo "SUSFS_FAKE_PATCHED=$fake_patched"
+          echo "SUSFS_FAKE_PATCHED_EXPAND=$fake_patched_expand"
+          echo "SUSFS_HAD_FOLD_FILEMAP_FIXUP=$had_fold_filemap_fixup"
+          echo "SUSFS_HAD_TASK_MMU_VMA_PAD_START=$had_task_mmu_vma_pad_start"
+        } >> "$GITHUB_ENV"
+        echo "::endgroup::"
+
+    - name: Apply SUSFS Kernel Patch
+      shell: bash
+      if: ${{ env.OP_SUSFS == 'true' }}
+      run: |
+        set -euo pipefail
+        echo "::group::Apply SUSFS kernel patch"
+        cd "$COMMON_KERNEL_FOLDER"
+        SUSFS_KERNEL_PATCH="$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_${SUSFS_KERNEL_BRANCH}.patch"
         echo "Applying SUSFS patch: $SUSFS_KERNEL_PATCH"
         # Attempt to apply the patch; enter error handling if it doesn't apply cleanly
         if ! patch -p1 --forward < "$SUSFS_KERNEL_PATCH"; then
@@ -1397,15 +1423,6 @@ runs:
           fi
         fi
 
-        # Preserve source-layout state for the smaller follow-up step. Keeping
-        # the two scripts below GitHub's 21,000-character expression limit is
-        # required for composite-action template validation.
-        {
-          echo "SUSFS_FAKE_PATCHED=$fake_patched"
-          echo "SUSFS_FAKE_PATCHED_EXPAND=$fake_patched_expand"
-          echo "SUSFS_HAD_FOLD_FILEMAP_FIXUP=$had_fold_filemap_fixup"
-          echo "SUSFS_HAD_TASK_MMU_VMA_PAD_START=$had_task_mmu_vma_pad_start"
-        } >> "$GITHUB_ENV"
         echo "::endgroup::"
 
     - name: Finalize SUSFS compatibility and configuration
@@ -1708,6 +1725,16 @@ runs:
           echo "Hmbird not enabled, skipping fengchi patch"
         fi
 
+        echo "✅ Platform compatibility patches applied"
+        echo "::endgroup::"
+
+    - name: Prepare Module Overlay
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Prepare module overlay"
+        cd "$COMMON_KERNEL_FOLDER"
+
         echo "Patching module intercept and overlay mechanism"
         MODULE_OVERLAY_PATCH="$KERNEL_PATCHES_FOLDER/oneplus/module_overlay/0001-module-Add-module-intercept-and-overlay-mechanism-$ANDROID_VER-$KERNEL_VER.patch"
         patch -p1 -F 3 < "$MODULE_OVERLAY_PATCH"
@@ -1799,6 +1826,18 @@ runs:
         done
 
         ccache --set-config=extra_files_to_hash="$copied_modules"
+
+        echo "✅ Module overlay prepared"
+        echo "::endgroup::"
+
+    - name: Apply Performance Patches
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Apply performance patches"
+        cd "$COMMON_KERNEL_FOLDER"
+        KERNEL_VERSION="$KERNEL_VER"
+        MIN_VERSION="5.16"
         
         echo "Patching optimized_mem_operations.patch"
         if ! patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/common/optimized_mem_operations.patch"; then
