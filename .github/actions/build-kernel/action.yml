@@ -1397,6 +1397,29 @@ runs:
           fi
         fi
 
+        # Preserve source-layout state for the smaller follow-up step. Keeping
+        # the two scripts below GitHub's 21,000-character expression limit is
+        # required for composite-action template validation.
+        {
+          echo "SUSFS_FAKE_PATCHED=$fake_patched"
+          echo "SUSFS_FAKE_PATCHED_EXPAND=$fake_patched_expand"
+          echo "SUSFS_HAD_FOLD_FILEMAP_FIXUP=$had_fold_filemap_fixup"
+          echo "SUSFS_HAD_TASK_MMU_VMA_PAD_START=$had_task_mmu_vma_pad_start"
+        } >> "$GITHUB_ENV"
+        echo "::endgroup::"
+
+    - name: Finalize SUSFS compatibility and configuration
+      shell: bash
+      if: ${{ env.OP_SUSFS == 'true' }}
+      run: |
+        set -euo pipefail
+        echo "::group::Finalize SUSFS compatibility and configuration"
+        cd "$COMMON_KERNEL_FOLDER"
+        fake_patched="${SUSFS_FAKE_PATCHED:-0}"
+        fake_patched_expand="${SUSFS_FAKE_PATCHED_EXPAND:-0}"
+        had_fold_filemap_fixup="${SUSFS_HAD_FOLD_FILEMAP_FIXUP:-0}"
+        had_task_mmu_vma_pad_start="${SUSFS_HAD_TASK_MMU_VMA_PAD_START:-0}"
+
         # The proven Android 12 / 5.10 SUSFS family patch predates the final
         # NostalgiKSU direct preinit and post-exec contract. Complete
         # the real do_execveat_common() integration instead of weakening the
