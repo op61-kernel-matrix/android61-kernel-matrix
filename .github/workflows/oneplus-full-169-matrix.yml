@@ -238,31 +238,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
-            /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true
-          for attempt in 1 2; do
-            if timeout 5m sudo apt-get \
-                -o Acquire::Retries=2 \
-                -o Acquire::http::Timeout=20 \
-                -o Acquire::https::Timeout=20 \
-                -o Dpkg::Lock::Timeout=300 \
-                update -qq && \
-              timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get \
-                -o Acquire::Retries=2 \
-                -o Acquire::http::Timeout=20 \
-                -o Acquire::https::Timeout=20 \
-                -o Dpkg::Lock::Timeout=300 \
-                install -y --no-install-recommends \
-                  git curl ca-certificates build-essential clang lld flex bison \
-                  libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-                  libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
-                  dos2unix kmod libdw-dev elfutils pigz zip patch aria2 cpio zstd; then
-              break
-            fi
-            [ "$attempt" -lt 2 ] || exit 1
-            echo "Dependency installation attempt $attempt failed; retrying..."
-            sleep $((attempt * 15))
-          done
+          timeout 10m sudo apt-get -o Acquire::Retries=3 update -qq
+          timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential clang lld flex bison \
+            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+            libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+            dos2unix kmod libdw-dev elfutils pigz
+          sudo apt-get clean
 
       - name: Load and lock proven OP13R pilot
         id: config
@@ -321,31 +303,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
-            /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true
-          for attempt in 1 2; do
-            if timeout 5m sudo apt-get \
-                -o Acquire::Retries=2 \
-                -o Acquire::http::Timeout=20 \
-                -o Acquire::https::Timeout=20 \
-                -o Dpkg::Lock::Timeout=300 \
-                update -qq && \
-              timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get \
-                -o Acquire::Retries=2 \
-                -o Acquire::http::Timeout=20 \
-                -o Acquire::https::Timeout=20 \
-                -o Dpkg::Lock::Timeout=300 \
-                install -y --no-install-recommends \
-                  git curl ca-certificates build-essential clang lld flex bison \
-                  libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-                  libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
-                  dos2unix kmod libdw-dev elfutils pigz zip patch aria2 cpio zstd; then
-              break
-            fi
-            [ "$attempt" -lt 2 ] || exit 1
-            echo "Dependency installation attempt $attempt failed; retrying..."
-            sleep $((attempt * 15))
-          done
+          timeout 10m sudo apt-get -o Acquire::Retries=3 update -qq
+          timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential clang lld flex bison \
+            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+            libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+            dos2unix kmod libdw-dev elfutils pigz
+          sudo apt-get clean
 
       - name: Fix NostalgiKSU include root on Android 16 / 6.12
         if: ${{ matrix.family == 'android16-6.12' }}
