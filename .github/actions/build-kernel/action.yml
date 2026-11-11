@@ -1939,6 +1939,7 @@ runs:
         anchors = (
             "SYM_FUNC_START_PI(clear_page)",
             "SYM_FUNC_START_PI(__pi_clear_page)",
+            "SYM_FUNC_START(__pi_clear_page)",
         )
         indexes = [index for index, line in enumerate(lines) if line.strip() in anchors]
         if len(indexes) != 1:
