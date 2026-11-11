@@ -2876,7 +2876,40 @@ runs:
                 echo "::error::Required BBG installer patch is missing: $BBG_SELECTION_PATCH"
                 exit 1
               fi
-              patch -p1 < "$BBG_SELECTION_PATCH"
+              # The pinned AnyKernel source differs slightly between the
+              # repaired 6.12 targets, so a line-number/context patch is too
+              # brittle here. Insert the reviewed added hunk at the stable
+              # split_boot anchor instead. Keep this idempotent for reruns.
+              BBG_SELECTION_PATCH="$BBG_SELECTION_PATCH" python3 - <<'PY'
+              import os
+              from pathlib import Path
+
+              installer = Path("anykernel.sh")
+              patch_file = Path(os.environ["BBG_SELECTION_PATCH"])
+              text = installer.read_text()
+
+              if "read_volume_key()" not in text:
+                  additions = []
+                  in_hunk = False
+                  for line in patch_file.read_text().splitlines():
+                      if line.startswith("@@"):
+                          in_hunk = True
+                          continue
+                      if in_hunk and line.startswith("+") and not line.startswith("+++"):
+                          additions.append(line[1:])
+
+                  if not additions:
+                      raise SystemExit("BBG installer patch contains no added hunk")
+
+                  lines = text.splitlines()
+                  try:
+                      insert_at = lines.index("split_boot") + 1
+                  except ValueError:
+                      raise SystemExit("split_boot anchor was not found in anykernel.sh")
+
+                  lines[insert_at:insert_at] = additions
+                  installer.write_text("\n".join(lines) + "\n")
+              PY
               grep -Fq 'read_volume_key()' anykernel.sh
               grep -Fq 'patch_cmdline "oplusboot.secure_user_mode"' anykernel.sh
               ;;
