@@ -238,12 +238,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          timeout 10m sudo apt-get -o Acquire::Retries=3 update -qq
-          timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git curl ca-certificates build-essential clang lld flex bison \
-            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-            libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
-            dos2unix kmod libdw-dev elfutils pigz
+          for attempt in 1 2; do
+            if timeout 10m sudo apt-get -o Acquire::Retries=3 update -qq && \
+              timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                git curl ca-certificates build-essential clang lld flex bison \
+                libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+                libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+                dos2unix kmod libdw-dev elfutils pigz; then
+              break
+            fi
+            [ "$attempt" -lt 2 ] || exit 1
+            echo "Fatal-compatible dependency setup timed out; retrying once..."
+          done
           sudo apt-get clean
 
       - name: Load and lock proven OP13R pilot
@@ -303,12 +309,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          timeout 10m sudo apt-get -o Acquire::Retries=3 update -qq
-          timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git curl ca-certificates build-essential clang lld flex bison \
-            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-            libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
-            dos2unix kmod libdw-dev elfutils pigz
+          for attempt in 1 2; do
+            if timeout 10m sudo apt-get -o Acquire::Retries=3 update -qq && \
+              timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                git curl ca-certificates build-essential clang lld flex bison \
+                libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+                libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+                dos2unix kmod libdw-dev elfutils pigz; then
+              break
+            fi
+            [ "$attempt" -lt 2 ] || exit 1
+            echo "Fatal-compatible dependency setup timed out; retrying once..."
+          done
           sudo apt-get clean
 
       - name: Fix NostalgiKSU include root on Android 16 / 6.12
@@ -316,12 +328,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat >> nostalgiksu/kernel/Kbuild <<'EOF'
-
-          # Android 16 / 6.12 may expose $(src) as an output-tree path. Anchor
-          # the built-in driver includes to the source-tree location staged by CI.
-          ccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include
-          EOF
+          # Android 16 / 6.12 exposes $(src) as an output-tree path. Define the
+          # source root before Kbuild parses preinit prerequisites and includes.
+          sed -i '1i KSU_KERNEL_DIR := $(srctree)/drivers/kernelsu' nostalgiksu/kernel/Kbuild
 
       - name: Load reviewed target and force SuSFS
         id: config
