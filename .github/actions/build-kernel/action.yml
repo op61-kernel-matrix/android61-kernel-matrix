@@ -1389,7 +1389,7 @@ runs:
             grep -qF '#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */' fs/namespace.c
             grep -qF '#include <linux/susfs_def.h>' fs/exec.c
             grep -qF '#include <linux/susfs_def.h>' fs/proc/task_mmu.c
-            if [ "${{ env.ANDROID_VER }}" = "android16" ] && [ "${{ env.KERNEL_VER }}" = "6.12" ]; then
+            if [ "$ANDROID_VER" = "android16" ] && [ "$KERNEL_VER" = "6.12" ]; then
               [ "$(grep -Fc '!SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file))' fs/proc/task_mmu.c)" -eq 3 ]
               grep -qF 'if (vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))' fs/proc/task_mmu.c
             fi
