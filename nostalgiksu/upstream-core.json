@@ -1,7 +1,9 @@
 {
-  "project": "LyraVoid/FinaSU",
-  "branch": "dev",
+  "project": "nostalgic/NostalgiKSU-FinaSU",
+  "branch": "ci",
+  "source_commit": "250c9e77dd7654b3288100eb2d96642c09c25f64",
   "upstream_commit": "1fdd083f348fb92452ca2f85ab2f78c929f84247",
-  "version": "v1.6.0-3-g1fdd083f",
-  "version_code": 33197
+  "version": "v1.6.1",
+  "version_code": 33198,
+  "release_identity": "v1.6.1-250c9e77@HEAD"
 }

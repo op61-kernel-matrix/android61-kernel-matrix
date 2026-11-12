@@ -24,7 +24,7 @@ on:
         type: boolean
         default: false
       release_tag:
-        description: Optional release tag (blank uses nostalgiksu-gaming-exp-33197-r<run>)
+        description: Optional release tag (blank uses nostalgiksu-gaming-exp-33198-r<run>)
         required: false
         type: string
         default: ""
@@ -455,13 +455,13 @@ jobs:
           REQUESTED_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          mapfile -d '' zips < <(find release-assets -maxdepth 1 -type f -name 'NOSTALGIC-AK3_*_NKSU_33197-6_SuSFS_v2.4.0_GAMING-EXP-v1.zip' -print0 | sort -z)
+          mapfile -d '' zips < <(find release-assets -maxdepth 1 -type f -name 'NOSTALGIC-AK3_*_NKSU_33198-6_SuSFS_v2.4.0_GAMING-EXP-v1.zip' -print0 | sort -z)
           [ "${#zips[@]}" -eq 169 ] || {
             echo "::error::Expected exactly 169 kernel ZIPs, found ${#zips[@]}"
             exit 1
           }
           tag="$REQUESTED_TAG"
-          [ -n "$tag" ] || tag="nostalgiksu-gaming-exp-33197-r${GITHUB_RUN_NUMBER}"
+          [ -n "$tag" ] || tag="nostalgiksu-gaming-exp-33198-r${GITHUB_RUN_NUMBER}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           {
             echo '# NostalgiKSU OnePlus kernel matrix'
@@ -472,7 +472,7 @@ jobs:
             echo '- **Gaming profile:** NTSync + BBR3 + ThinLTO + uclamp/schedutil + MGLRU gates'
             echo '- **ReKernel:** pinned official 11.7 companion module, selected by Android/KMI'
             echo '- **Pilot:** OnePlus 13R Android 16, kernel 6.1.141'
-            echo '- **NostalgiKSU:** 33197-6'
+            echo '- **NostalgiKSU:** 33198-6 (`v1.6.1-250c9e77@HEAD`)'
             echo '- **SuSFS:** 2.4.0 from immutable per-family pins'
             echo '- **Families:** 5.10=38, 5.15=29, 6.1=59, 6.6=35, 6.12=8'
             echo '- **Strict checks:** NostalgiKSU flashing banner, bright green #00E676, installer identity, ARM64 image, SuSFS inline hook sites and required capabilities'
@@ -499,8 +499,8 @@ jobs:
           TAG: ${{ steps.notes.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" release-assets/NOSTALGIC-AK3_*_NKSU_33197-6_SuSFS_v2.4.0_GAMING-EXP-v1.zip \
+          gh release create "$TAG" release-assets/NOSTALGIC-AK3_*_NKSU_33198-6_SuSFS_v2.4.0_GAMING-EXP-v1.zip \
             --repo "$GITHUB_REPOSITORY" \
-            --title "EXPERIMENTAL · NostalgiKSU Gaming 33197 · 169 OnePlus kernels" \
+            --title "EXPERIMENTAL · NostalgiKSU Gaming 33198 · 169 OnePlus kernels" \
             --notes-file release-notes.md
 

@@ -3,6 +3,13 @@
   "name": "NostalgiKSU Gaming Profile v1",
   "experimental": true,
   "target_count": 169,
+  "kernel_core": {
+    "release": "33198-6",
+    "version_code": 33198,
+    "version": "v1.6.1",
+    "source_commit": "250c9e77dd7654b3288100eb2d96642c09c25f64",
+    "release_identity": "v1.6.1-250c9e77@HEAD"
+  },
   "stable_baseline": {
     "release": "33197-6",
     "workflow": "stable-reference/33197-6/oneplus-full-169-matrix.yml",

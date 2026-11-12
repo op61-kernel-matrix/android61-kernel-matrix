@@ -1021,30 +1021,32 @@ runs:
         echo "✅ BakaSU added (commit: ${KSU_COMMIT_SHA:0:8})"
         echo "::endgroup::"
 
-    - name: Add device-verified NostalgiKSU 33197-6
+    - name: Add device-verified NostalgiKSU 33198-6
       shell: bash
       if: ${{ inputs.ksu_type == 'NostalgiKSU' }}
       run: |
         set -euo pipefail
-        echo "::group::Add device-verified NostalgiKSU 33197-6"
+        echo "::group::Add device-verified NostalgiKSU 33198-6"
         cd "$KERNEL_PLATFORM_FOLDER"
         rm -rf KernelSU
         mkdir -p KernelSU
         cp -a "$GITHUB_WORKSPACE/nostalgiksu/kernel" KernelSU/kernel
         cp -a "$GITHUB_WORKSPACE/nostalgiksu/uapi" KernelSU/uapi
-        jq -e '.version_code == 33197 and
-               .version == "v1.6.0-3-g1fdd083f" and
+        jq -e '.version_code == 33198 and
+               .version == "v1.6.1" and
+               .release_identity == "v1.6.1-250c9e77@HEAD" and
+               .source_commit == "250c9e77dd7654b3288100eb2d96642c09c25f64" and
                .upstream_commit == "1fdd083f348fb92452ca2f85ab2f78c929f84247"' \
           "$GITHUB_WORKSPACE/nostalgiksu/upstream-core.json" >/dev/null
         test -f KernelSU/kernel/supercall/dispatch.c
         test -f KernelSU/kernel/extension/susfs.c
         test -L KernelSU/kernel/include/uapi
 
-        # Pin the exact kernel ABI and stable signing identity validated by the
-        # device-tested run-65 manager. CI must never substitute another
-        # KernelSU fork or merely relabel an older NostalgiKSU source.
-        sed -i '1i FINASU_TRUSTED_SIZE := 0x515\nFINASU_TRUSTED_HASH := ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456\nKSU_VERSION_FULL_OVERRIDE := v1.6.0-3-g1fdd083f-33197-1fdd083f@ci\nKSU_VERSION_OVERRIDE := 33197' KernelSU/kernel/Kbuild
-        KSU_COMMIT_SHA=1fdd083f348fb92452ca2f85ab2f78c929f84247
+        # Pin the 33198 release identity and the stable signing identity
+        # validated by CI run 66. The proven 33197 matrix compatibility fixes
+        # remain layered on the same upstream kernel/UAPI base.
+        sed -i '1i FINASU_TRUSTED_SIZE := 0x515\nFINASU_TRUSTED_HASH := ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456\nKSU_VERSION_FULL_OVERRIDE := v1.6.1-250c9e77@HEAD\nKSU_VERSION_OVERRIDE := 33198' KernelSU/kernel/Kbuild
+        KSU_COMMIT_SHA=250c9e77dd7654b3288100eb2d96642c09c25f64
 
         DRIVER_DIR="$COMMON_KERNEL_FOLDER/drivers"
         ln -sfn "$(realpath --relative-to="$DRIVER_DIR" "$KERNEL_PLATFORM_FOLDER/KernelSU/kernel")" "$DRIVER_DIR/kernelsu"
@@ -1058,9 +1060,9 @@ runs:
         EOF
 
         echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> "$GITHUB_ENV"
-        echo "KSUVER=33197-6" >> "$GITHUB_ENV"
+        echo "KSUVER=33198-6" >> "$GITHUB_ENV"
         echo "NostalgiKSU" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
-        echo "33197-6" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
+        echo "33198-6" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
         echo "NostalgiKSU source: $KSU_COMMIT_SHA"
         echo "::endgroup::"
 
@@ -1448,7 +1450,7 @@ runs:
         if [ "${{ env.ANDROID_VER }}" = "android12" ] && \
            [ "${{ env.KERNEL_VER }}" = "5.10" ] && \
            [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          echo "Completing NostalgiKSU 33197 exec hooks for Android 12 / 5.10..."
+          echo "Completing NostalgiKSU 33198 exec hooks for Android 12 / 5.10..."
           python3 "$GITHUB_WORKSPACE/.github/scripts/complete-nostalgiksu-510-exec-hooks.py" fs/exec.c
         fi
 
@@ -2930,8 +2932,8 @@ runs:
           done
         fi
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          grep -qF '33197' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33197 marker missing"; exit 1; }
-          grep -qF 'v1.6.0-3-g1fdd083f-33197-1fdd083f@ci' "$IMAGE_STRINGS" || { echo "::error::Verified NostalgiKSU 33197 source marker missing"; exit 1; }
+          grep -qF '33198' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33198 marker missing"; exit 1; }
+          grep -qF 'v1.6.1-250c9e77@HEAD' "$IMAGE_STRINGS" || { echo "::error::Verified NostalgiKSU 33198 source marker missing"; exit 1; }
           grep -qF 'ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456' "$IMAGE_STRINGS" || { echo "::error::Validated run-65 manager certificate missing"; exit 1; }
           if grep -qiE 'OP-BAKASU|huangdihd|ReSukiSU' "$IMAGE_STRINGS"; then
             echo "::error::Foreign visible kernel branding found in Image"
@@ -3190,7 +3192,7 @@ runs:
           if [ "${{ inputs.gaming_profile }}" = "true" ]; then
             PROFILE_SUFFIX='_GAMING-EXP-v1'
           fi
-          ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33197-6_SuSFS_${SUSVER}${PROFILE_SUFFIX}.zip"
+          ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33198-6_SuSFS_${SUSVER}${PROFILE_SUFFIX}.zip"
         elif [ "${{ env.OP_SUSFS }}" = true ]; then
           ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_${{ inputs.ksu_type }}_${KSUVER:-unknown}_SuSFS_${SUSVER:-unknown}.zip"
         else
