@@ -24,7 +24,7 @@ on:
         type: boolean
         default: false
       release_tag:
-        description: Optional release tag (blank uses nostalgiksu-gaming-exp-33198-r<run>)
+        description: Optional release tag (blank uses nostalgiksu-gaming-33198-r<run>)
         required: false
         type: string
         default: ""
@@ -33,7 +33,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: nostalgiksu-gaming-exp-full-169-${{ github.ref }}
+  group: nostalgiksu-gaming-full-169-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -455,13 +455,13 @@ jobs:
           REQUESTED_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          mapfile -d '' zips < <(find release-assets -maxdepth 1 -type f -name 'NOSTALGIC-AK3_*_NKSU_33198-6_SuSFS_v2.4.0_GAMING-EXP-v1.zip' -print0 | sort -z)
+          mapfile -d '' zips < <(find release-assets -maxdepth 1 -type f -name 'NOSTALGIC-AK3_*_NKSU_33198-6_SuSFS_v2.4.0_NOSTALGIC-GAMING.zip' -print0 | sort -z)
           [ "${#zips[@]}" -eq 169 ] || {
             echo "::error::Expected exactly 169 kernel ZIPs, found ${#zips[@]}"
             exit 1
           }
           tag="$REQUESTED_TAG"
-          [ -n "$tag" ] || tag="nostalgiksu-gaming-exp-33198-r${GITHUB_RUN_NUMBER}"
+          [ -n "$tag" ] || tag="nostalgiksu-gaming-33198-r${GITHUB_RUN_NUMBER}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           {
             echo '# NostalgiKSU OnePlus kernel matrix'
@@ -499,7 +499,7 @@ jobs:
           TAG: ${{ steps.notes.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" release-assets/NOSTALGIC-AK3_*_NKSU_33198-6_SuSFS_v2.4.0_GAMING-EXP-v1.zip \
+          gh release create "$TAG" release-assets/NOSTALGIC-AK3_*_NKSU_33198-6_SuSFS_v2.4.0_NOSTALGIC-GAMING.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "EXPERIMENTAL · NostalgiKSU Gaming 33198 · 169 OnePlus kernels" \
             --notes-file release-notes.md

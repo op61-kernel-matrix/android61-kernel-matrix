@@ -2445,7 +2445,9 @@ runs:
         # Keep the exact stock-shaped release string so OnePlus vendor modules
         # retain their expected vermagic/KMI contract. NostalgiKSU identity is
         # reported through its own ABI, never by mutating kernel.release.
-        if [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
+        if [ "${{ inputs.gaming_profile }}" = "true" ]; then
+          CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-GAMING"
+        elif [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
           CUSTOM_LOCALVERSION="-${ANDROID_VER}-${OP_UNAME}"
         else
           CUSTOM_LOCALVERSION="-${ANDROID_VER}-${OP_UNAME}-${{ github.actor }}"
@@ -2576,10 +2578,7 @@ runs:
         
         make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" O="$OUT" gki_defconfig
         
-        LOCAL_LOCALVERSION="${CUSTOM_LOCALVERSION:--OP-BAKASU}"
-        if [ "${{ inputs.gaming_profile }}" = "true" ]; then
-          LOCAL_LOCALVERSION="${LOCAL_LOCALVERSION}-GAMING-EXP-v1"
-        fi
+        LOCAL_LOCALVERSION="${CUSTOM_LOCALVERSION:--NOSTALGIC-GAMING}"
         if [ -n "${LOCAL_LOCALVERSION:-}" ]; then
           scripts/config --file "$OUT/.config" --set-str LOCALVERSION "${LOCAL_LOCALVERSION}"
           scripts/config --file "$OUT/.config" -d LOCALVERSION_AUTO || true
@@ -2855,11 +2854,15 @@ runs:
         echo "Kernel Uname: $KERNEL_UNAME"
         echo "KERNEL_UNAME=$KERNEL_UNAME" >> "$GITHUB_ENV"
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          # Numeric uname suffixes are exact stock contracts (the proven pilot
-          # uses 8-g88433133-ab68376540). Fatal matrix entries intentionally use
-          # OP-WILD, so validate their GKI family without pretending every
-          # device has the pilot's OnePlus build suffix.
-          if [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
+          # Gaming builds have one explicit lab identity regardless of the
+          # source config's stock or compatibility uname placeholder.
+          if [ "${{ inputs.gaming_profile }}" = "true" ]; then
+            grep -Fq "Linux version ${OP_KERNEL_VERSION}." <<<"$KERNEL_UNAME" &&
+              grep -Fq -- "-${OP_ANDROID_VERSION}-NOSTALGIC-GAMING" <<<"$KERNEL_UNAME" || {
+              echo "::error::Unexpected NOSTALGIC-GAMING kernel uname: $KERNEL_UNAME"
+              exit 1
+            }
+          elif [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
             grep -Fq "Linux version ${OP_KERNEL_VERSION}." <<<"$KERNEL_UNAME" &&
               grep -Fq -- "-${OP_ANDROID_VERSION}-${OP_UNAME}" <<<"$KERNEL_UNAME" || {
               echo "::error::Unexpected exact stock kernel uname: $KERNEL_UNAME"
@@ -2932,7 +2935,7 @@ runs:
           done
         fi
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          grep -qF '33198' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33198 marker missing"; exit 1; }
+          grep -qF -- '-- KernelSU version supplied by build: 33198' "$COMMON_KERNEL_FOLDER/build.log" || { echo "::error::NostalgiKSU 33198 build identity missing"; exit 1; }
           grep -qF 'v1.6.1-250c9e77@HEAD' "$IMAGE_STRINGS" || { echo "::error::Verified NostalgiKSU 33198 source marker missing"; exit 1; }
           grep -qF 'ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456' "$IMAGE_STRINGS" || { echo "::error::Validated run-65 manager certificate missing"; exit 1; }
           if grep -qiE 'OP-BAKASU|huangdihd|ReSukiSU' "$IMAGE_STRINGS"; then
@@ -3190,7 +3193,7 @@ runs:
           test -n "${SUSVER:-}"
           PROFILE_SUFFIX=''
           if [ "${{ inputs.gaming_profile }}" = "true" ]; then
-            PROFILE_SUFFIX='_GAMING-EXP-v1'
+            PROFILE_SUFFIX='_NOSTALGIC-GAMING'
           fi
           ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33198-6_SuSFS_${SUSVER}${PROFILE_SUFFIX}.zip"
         elif [ "${{ env.OP_SUSFS }}" = true ]; then

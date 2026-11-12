@@ -6,7 +6,7 @@ expected_model=${2:?usage: audit-nostalgic-gaming-ak3.sh ZIP_PATH EXPECTED_MODEL
 zip_name=$(basename "$zip_path")
 
 [[ -s "$zip_path" ]] || { echo "::error::Missing NOSTALGIC-AK3 archive: $zip_path"; exit 1; }
-[[ "$zip_name" == NOSTALGIC-AK3_${expected_model}_*_NKSU_33198-6_SuSFS_v2.4.0_GAMING-EXP-v1.zip ]] || {
+[[ "$zip_name" == NOSTALGIC-AK3_${expected_model}_*_NKSU_33198-6_SuSFS_v2.4.0_NOSTALGIC-GAMING.zip ]] || {
   echo "::error::Non-canonical kernel archive name: $zip_name"
   exit 1
 }
