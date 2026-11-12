@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "name": "NostalgiKSU Gaming Profile v1",
+  "experimental": true,
+  "target_count": 169,
+  "stable_baseline": {
+    "release": "33197-6",
+    "workflow": "stable-reference/33197-6/oneplus-full-169-matrix.yml",
+    "sha256": "04d39cbebfe1b22bbc8d3355af7726f466656211e29c2ff9aca6c944e4ff8b2c"
+  },
+  "build_features": {
+    "required": ["CONFIG_UCLAMP_TASK=y", "CONFIG_CPU_FREQ=y", "CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y", "CONFIG_NTSYNC=y", "CONFIG_LTO_CLANG_THIN=y", "# CONFIG_WQ_POWER_EFFICIENT_DEFAULT is not set"],
+    "instrumentation": ["CONFIG_PSI=y", "touch/input event capture", "SurfaceFlinger frame-time capture", "thermal-soak logging"],
+    "optimization": "O2",
+    "network": "BBR3 enabled",
+    "memory": "MGLRU enabled"
+  },
+  "runtime_policy": {
+    "cpu_maximum": "highest frequency advertised by each device CPU policy",
+    "gpu_maximum": "highest frequency advertised by the device GPU driver",
+    "frequency_mode": "stock maximum only; no fabricated frequency or voltage entries",
+    "thermal_mode": "retain vendor thermal mitigation and critical shutdown",
+    "restore_required": true,
+    "opt_in_scripts": ["gaming/runtime/game-mode-on.sh", "gaming/runtime/game-mode-off.sh"]
+  },
+  "prohibited": ["hard-coded universal CPU or GPU frequencies", "new or modified OPP or voltage tables without device source and validation", "thermal-zone deletion or thermal shutdown bypass", "stable catalog publication before pilot and soak tests pass"],
+  "promotion_gates": ["OP13r OxygenOS 16 kernel 6.1.141 pilot builds", "boot, Wi-Fi, cellular, camera, audio, charging and suspend smoke tests pass", "sustained gaming thermal soak completes without shutdown or uncontrolled throttling", "frame-time and input-latency results beat or match the stable baseline", "rollback ZIP is verified"]
+}

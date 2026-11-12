@@ -1,0 +1,473 @@
+name: OnePlus full 169-target NostalgiKSU matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      repair_failed_nine:
+        description: Rebuild only the nine failed targets from run 42908636575 after validating the full 169-target catalog
+        required: true
+        type: boolean
+        default: false
+      debug:
+        description: Upload diagnostic artifacts for every target
+        required: true
+        type: boolean
+        default: false
+      make_release:
+        description: Publish the complete 169-kernel GitHub release after every target passes
+        required: true
+        type: boolean
+        default: false
+      release_tag:
+        description: Optional release tag (blank uses nostalgiksu-33197-susfs-v2.4.0-r<run>)
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: oneplus-full-169-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PILOT_CONFIG: configs/a16/OP13r-6.1.141.json
+  FIRST_MATRIX_CONFIG: configs/a16/OP13r.json
+  SUSFS_PIN_MANIFEST: configs/susfs-2.4.0-pins.json
+  SUSFS_REPOSITORY: https://gitlab.com/simonpunk/susfs4ksu.git
+  REQUIRED_SUSFS_VERSION: "2.4.0"
+
+jobs:
+  prepare:
+    name: Validate and prepare exact 169-target plan
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      pilot_susfs_ref: ${{ steps.plan.outputs.pilot_susfs_ref }}
+      susfs_pins: ${{ steps.plan.outputs.susfs_pins }}
+    steps:
+      - name: Checkout matrix controller
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Resolve and validate SuSFS 2.4.0 family and per-device data
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -s "$SUSFS_PIN_MANIFEST"
+          jq -e --arg version "$REQUIRED_SUSFS_VERSION" --arg source "$SUSFS_REPOSITORY" \
+            '.version == $version and .source == $source and (.families | length) == 5' \
+            "$SUSFS_PIN_MANIFEST" >/dev/null
+          declare -A requested_ref=()
+          for family in android12-5.10 android13-5.15 android14-6.1 android15-6.6 android16-6.12; do
+            requested_ref[$family]=$(jq -er --arg family "$family" '.families[$family]' "$SUSFS_PIN_MANIFEST")
+          done
+          declare -A resolved_ref=()
+          pins='{}'
+
+          for family in android12-5.10 android13-5.15 android14-6.1 android15-6.6 android16-6.12; do
+            if [[ ! "${requested_ref[$family]}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::${family} must use an immutable 40-character SuSFS commit, not a branch or tag"
+              exit 1
+            fi
+            work=$(mktemp -d)
+            git -C "$work" init -q
+            git -C "$work" remote add origin "$SUSFS_REPOSITORY"
+            git -C "$work" fetch -q --depth=1 origin "${requested_ref[$family]}"
+            sha=$(git -C "$work" rev-parse FETCH_HEAD)
+            git -C "$work" checkout -q --detach "$sha"
+            header="$work/kernel_patches/include/linux/susfs.h"
+            patch="$work/kernel_patches/50_add_susfs_in_gki-${family}.patch"
+            test -s "$header"
+            test -s "$patch"
+            version=$(sed -nE 's/^#define[[:space:]]+SUSFS_VERSION[[:space:]]+"v?([^"]+)".*/\1/p' "$header" | head -n1)
+            if [ "$version" != "$REQUIRED_SUSFS_VERSION" ]; then
+              echo "::error::${family} resolved to SuSFS ${version:-unknown}, required ${REQUIRED_SUSFS_VERSION}"
+              exit 1
+            fi
+            resolved_ref[$family]="$sha"
+            pins=$(jq -c --arg family "$family" --arg sha "$sha" '. + {($family): $sha}' <<<"$pins")
+            rm -rf "$work"
+          done
+
+          test -s "$PILOT_CONFIG"
+          jq -e '.model == "OP13r-6.1.141" and
+                 .manifest == "oneplus_13r_6.1.141_w.xml" and
+                 .android_version == "android14" and .kernel_version == "6.1"' \
+            "$PILOT_CONFIG" >/dev/null
+          pilot_manifest=$(jq -er '.manifest' "$PILOT_CONFIG")
+          pilot_os=$(jq -er '.os_version | ascii_downcase' "$PILOT_CONFIG")
+          if [[ "$pilot_manifest" != https://* ]]; then
+            test -s "manifests/${pilot_os}/${pilot_manifest}" || {
+              echo "::error::Pilot manifest is missing: manifests/${pilot_os}/${pilot_manifest}"
+              exit 1
+            }
+          fi
+
+          test -s "$FIRST_MATRIX_CONFIG"
+          jq -e '.model == "OP13r-6.1.157" and
+                 .manifest == "oneplus_13r_6.1.157_w.xml" and
+                 .android_version == "android14" and .kernel_version == "6.1"' \
+            "$FIRST_MATRIX_CONFIG" >/dev/null
+          grep -qF 'revision="7a7ae28e849b0f9b42b8b6fc26feebe1864bf7ac"' \
+            manifests/a16/oneplus_13r_6.1.157_w.xml
+          grep -qF 'revision="a38d33feb96867ebd75e555f21e81c7b276b9b4f"' \
+            manifests/a16/oneplus_13r_6.1.157_w.xml
+          grep -qF 'revision="28b975ada54f8610ed531a6b57253aed10e7c87d"' \
+            manifests/a16/oneplus_13r_6.1.157_w.xml
+
+          mapfile -t remaining_files < <(
+            find configs/a14 configs/a15 configs/a16 -type f -name '*.json' -print |
+              sort |
+              grep -Fvx -e "$PILOT_CONFIG" -e "$FIRST_MATRIX_CONFIG"
+          )
+          [ "${#remaining_files[@]}" -eq 167 ] || {
+            echo "::error::Expected 167 configs besides the pilot and first matrix target, found ${#remaining_files[@]}"
+            exit 1
+          }
+
+          # The pilot and all regular targets start independently. Target 2 is
+          # the separately pinned OP13R 6.1.157 source; it is never inferred
+          # from the pilot or from a filename assertion.
+          files=("$FIRST_MATRIX_CONFIG" "${remaining_files[@]}")
+
+          plan=$(mktemp)
+          : > "$plan"
+          declare -A counts=()
+          sequence=1
+          for file in "${files[@]}"; do
+            android=$(jq -er '.android_version' "$file")
+            kernel=$(jq -er '.kernel_version' "$file")
+            model=$(jq -er '.model' "$file")
+            manifest=$(jq -er '.manifest' "$file")
+            os_dir=$(jq -er '.os_version | ascii_downcase' "$file")
+            if [[ "$manifest" != https://* ]]; then
+              test -s "manifests/${os_dir}/${manifest}" || {
+                echo "::error::${file} references missing manifest manifests/${os_dir}/${manifest}"
+                exit 1
+              }
+            fi
+            family="${android}-${kernel}"
+            case "$family" in
+              android12-5.10|android13-5.15|android14-6.1|android15-6.6|android16-6.12) ;;
+              *) echo "::error::Unsupported family ${family} in ${file}"; exit 1 ;;
+            esac
+            counts[$family]=$(( ${counts[$family]:-0} + 1 ))
+            sequence=$((sequence + 1))
+            jq -nc --arg config "$file" --arg family "$family" --arg model "$model" \
+              --argjson sequence "$sequence" \
+              --arg susfs_version "$REQUIRED_SUSFS_VERSION" \
+              --arg susfs_ref "${resolved_ref[$family]}" \
+              '{sequence:$sequence,config:$config,family:$family,model:$model,susfs_version:$susfs_version,susfs_ref:$susfs_ref}' >> "$plan"
+          done
+
+          # Add the separate 6.1.141 pilot to the matrix family totals.
+          counts[android14-6.1]=$(( ${counts[android14-6.1]:-0} + 1 ))
+          [ "${counts[android12-5.10]:-0}" -eq 38 ]
+          [ "${counts[android13-5.15]:-0}" -eq 29 ]
+          [ "${counts[android14-6.1]:-0}" -eq 59 ]
+          [ "${counts[android15-6.6]:-0}" -eq 35 ]
+          [ "${counts[android16-6.12]:-0}" -eq 8 ]
+
+          target_count=169
+          if [ "${{ inputs.repair_failed_nine }}" = true ]; then
+            repair_plan=$(mktemp)
+            jq -c 'select(
+              .config == "configs/a16/OP-ACE-6-ULTRA.json" or
+              .config == "configs/a16/OP-ACE-6T.json" or
+              .config == "configs/a16/OP-PAD-3-PRO.json" or
+              .config == "configs/a16/OP-PAD-4.json" or
+              .config == "configs/a16/OP-PAD-LITE.json" or
+              .config == "configs/a16/OP13r-6.1.118.json" or
+              .config == "configs/a16/OP15.json" or
+              .config == "configs/a16/OP15T.json" or
+              .config == "configs/a16/OP15r.json"
+            )' "$plan" > "$repair_plan"
+            [ "$(wc -l < "$repair_plan")" -eq 9 ]
+            plan="$repair_plan"
+            target_count=9
+          fi
+
+          matrix=$(jq -sc '{include:.}' "$plan")
+          echo "matrix=$(jq -c . <<<"$matrix")" >> "$GITHUB_OUTPUT"
+          echo "count=$target_count" >> "$GITHUB_OUTPUT"
+          echo "pilot_susfs_ref=${resolved_ref[android14-6.1]}" >> "$GITHUB_OUTPUT"
+          echo "susfs_pins=$pins" >> "$GITHUB_OUTPUT"
+
+          # Preserve the exact reviewed 169-config catalog for release notes.
+          find configs/a14 configs/a15 configs/a16 -type f -name '*.json' -print0 |
+            sort -z | xargs -0 jq -s '.' > release-catalog.json
+          [ "$(jq 'length' release-catalog.json)" -eq 169 ]
+
+          {
+            echo '## Validated 169-target build plan'
+            echo
+            echo '- Sole pilot: `configs/a16/OP13r-6.1.141.json`'
+            echo '- Target 2 (runs concurrently): `configs/a16/OP13r.json` = OP13R 6.1.157'
+            echo '- Families: 5.10=38, 5.15=29, 6.1=59, 6.6=35, 6.12=8'
+            echo '- SuSFS: exactly 2.4.0 on all five immutable family pins'
+            echo '- Every device record carries its family, SuSFS version and resolved commit'
+            echo "- Resolved pins: \`$pins\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload exact release catalog
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-catalog
+          path: release-catalog.json
+          retention-days: 90
+
+  pilot:
+    name: "1/169 PILOT · OP13R 6.1.141"
+    if: ${{ !inputs.repair_failed_nine }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout matrix controller
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout 10m sudo apt-get -o Acquire::Retries=3 update -qq && \
+              timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                git curl ca-certificates build-essential clang lld flex bison \
+                libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+                libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+                dos2unix kmod libdw-dev elfutils pigz; then
+              break
+            fi
+            [ "$attempt" -lt 2 ] || exit 1
+            echo "Fatal-compatible dependency setup timed out; retrying once..."
+          done
+          sudo apt-get clean
+
+      - name: Load and lock proven OP13R pilot
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          JSON=$(jq -c --arg version "$REQUIRED_SUSFS_VERSION" \
+            --arg family 'android14-6.1' \
+            --arg commit '${{ needs.prepare.outputs.pilot_susfs_ref }}' \
+            '.susfs=true | .susfs_version=$version | .susfs_family=$family | .susfs_commit=$commit' \
+            "$PILOT_CONFIG")
+          jq -e '.model == "OP13r-6.1.141" and
+                 .manifest == "oneplus_13r_6.1.141_w.xml" and
+                 .android_version == "android14" and .kernel_version == "6.1"' \
+            <<<"$JSON" >/dev/null
+          echo "json=$JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Build and audit pilot
+        id: build
+        uses: ./.github/actions/build-kernel
+        with:
+          op_config_json: ${{ steps.config.outputs.json }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          ksu_type: NostalgiKSU
+          susfs_commit_hash_or_branch: ${{ needs.prepare.outputs.pilot_susfs_ref }}
+          optimize_level: O2
+          clean: false
+          debug: ${{ inputs.debug }}
+
+      - name: Enforce pilot artifact identity and flashing branding
+        shell: bash
+        env:
+          ZIP_NAME: ${{ steps.build.outputs.zip_name }}
+        run: |
+          set -euo pipefail
+          ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
+          test -n "$ZIP_PATH"
+          bash .github/scripts/audit-nostalgic-ak3.sh "$ZIP_PATH" 'OP13r-6.1.141'
+
+  build:
+    name: "${{ matrix.sequence }}/169 · ${{ matrix.family }} · ${{ matrix.config }}"
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout matrix controller
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout 10m sudo apt-get -o Acquire::Retries=3 update -qq && \
+              timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                git curl ca-certificates build-essential clang lld flex bison \
+                libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+                libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+                dos2unix kmod libdw-dev elfutils pigz; then
+              break
+            fi
+            [ "$attempt" -lt 2 ] || exit 1
+            echo "Fatal-compatible dependency setup timed out; retrying once..."
+          done
+          sudo apt-get clean
+
+      - name: Fix NostalgiKSU include root on Android 16 / 6.12
+        if: ${{ matrix.family == 'android16-6.12' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Android 16 / 6.12 exposes $(src) as an output-tree path. Define the
+          # source root before Kbuild parses preinit prerequisites and includes.
+          sed -i '1i KSU_KERNEL_DIR := $(srctree)/drivers/kernelsu' nostalgiksu/kernel/Kbuild
+
+      - name: Load reviewed target and force SuSFS
+        id: config
+        shell: bash
+        env:
+          CONFIG_PATH: ${{ matrix.config }}
+          EXPECTED_FAMILY: ${{ matrix.family }}
+          EXPECTED_SUSFS_VERSION: ${{ matrix.susfs_version }}
+          EXPECTED_SUSFS_COMMIT: ${{ matrix.susfs_ref }}
+        run: |
+          set -euo pipefail
+          test -s "$CONFIG_PATH"
+          JSON=$(jq -c --arg version "$EXPECTED_SUSFS_VERSION" \
+            --arg family "$EXPECTED_FAMILY" --arg commit "$EXPECTED_SUSFS_COMMIT" \
+            '.susfs=true | .susfs_version=$version | .susfs_family=$family | .susfs_commit=$commit' \
+            "$CONFIG_PATH")
+          family=$(jq -r '"\(.android_version)-\(.kernel_version)"' <<<"$JSON")
+          [ "$family" = "$EXPECTED_FAMILY" ]
+          jq -e --arg version "$REQUIRED_SUSFS_VERSION" --arg family "$EXPECTED_FAMILY" \
+            --arg commit "$EXPECTED_SUSFS_COMMIT" \
+            '.susfs == true and .susfs_version == $version and .susfs_family == $family and .susfs_commit == $commit' \
+            <<<"$JSON" >/dev/null
+          echo "json=$JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Build and enforce all nine capabilities
+        id: build
+        uses: ./.github/actions/build-kernel
+        with:
+          op_config_json: ${{ steps.config.outputs.json }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          ksu_type: NostalgiKSU
+          susfs_commit_hash_or_branch: ${{ matrix.susfs_ref }}
+          optimize_level: O2
+          clean: false
+          debug: ${{ inputs.debug }}
+
+      - name: Enforce target flashing branding
+        shell: bash
+        env:
+          ZIP_NAME: ${{ steps.build.outputs.zip_name }}
+          EXPECTED_MODEL: ${{ matrix.model }}
+        run: |
+          set -euo pipefail
+          ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
+          test -n "$ZIP_PATH"
+          bash .github/scripts/audit-nostalgic-ak3.sh "$ZIP_PATH" "$EXPECTED_MODEL"
+
+  complete:
+    name: Confirm complete green 169-target release
+    if: always()
+    needs: [prepare, pilot, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Reject partial or failed matrix
+        shell: bash
+        env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          PILOT_RESULT: ${{ needs.pilot.result }}
+          MATRIX_RESULT: ${{ needs.build.result }}
+          TARGET_COUNT: ${{ needs.prepare.outputs.count }}
+          REPAIR_FAILED_NINE: ${{ inputs.repair_failed_nine }}
+        run: |
+          set -euo pipefail
+          [ "$PREPARE_RESULT" = success ]
+          [ "$MATRIX_RESULT" = success ]
+          if [ "$REPAIR_FAILED_NINE" = true ]; then
+            [ "$TARGET_COUNT" = 9 ]
+            [ "$PILOT_RESULT" = skipped ]
+            echo 'All nine recovery targets passed the build, installer and nine-capability audits.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            [ "$TARGET_COUNT" = 169 ]
+            [ "$PILOT_RESULT" = success ]
+            echo 'All 169 targets passed the build, installer and nine-capability audits.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  release:
+    name: Publish complete 169-kernel release
+    if: ${{ needs.complete.result == 'success' && inputs.make_release == true && !inputs.repair_failed_nine }}
+    needs: [complete]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download all successful kernel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: NOSTALGIC-AK3_*
+          merge-multiple: true
+
+      - name: Enforce complete release and write notes
+        id: notes
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mapfile -d '' zips < <(find release-assets -maxdepth 1 -type f -name 'NOSTALGIC-AK3_*_NKSU_33197-6_SuSFS_v2.4.0.zip' -print0 | sort -z)
+          [ "${#zips[@]}" -eq 169 ] || {
+            echo "::error::Expected exactly 169 kernel ZIPs, found ${#zips[@]}"
+            exit 1
+          }
+          tag="$REQUESTED_TAG"
+          [ -n "$tag" ] || tag="nostalgiksu-33197-susfs-v2.4.0-r${GITHUB_RUN_NUMBER}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          {
+            echo '# NostalgiKSU OnePlus kernel matrix'
+            echo
+            echo '- **169/169 kernels built and audited**'
+            echo '- **Pilot:** OnePlus 13R Android 16, kernel 6.1.141'
+            echo '- **NostalgiKSU:** 33197-6'
+            echo '- **SuSFS:** 2.4.0 from immutable per-family pins'
+            echo '- **Families:** 5.10=38, 5.15=29, 6.1=59, 6.6=35, 6.12=8'
+            echo '- **Strict checks:** NostalgiKSU flashing banner, bright green #00E676, installer identity, ARM64 image, SuSFS inline hook sites and required capabilities'
+            echo
+            echo '## Kernel downloads'
+            echo
+            echo '| Kernel package | Size | SHA-256 |'
+            echo '|---|---:|---|'
+            for file in "${zips[@]}"; do
+              name=$(basename "$file")
+              size=$(du -h "$file" | awk '{print $1}')
+              sha=$(sha256sum "$file" | awk '{print $1}')
+              url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/${name}"
+              printf '| [%s](%s) | %s | `%s` |\n' "$name" "$url" "$size" "$sha"
+            done
+            echo
+            echo 'Every ZIP is an individual AnyKernel3 flashable package. Keep the stock boot/init_boot image available before testing.'
+          } > release-notes.md
+
+      - name: Publish release and all 169 assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.notes.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" release-assets/NOSTALGIC-AK3_*_NKSU_33197-6_SuSFS_v2.4.0.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "NostalgiKSU 33197 · SuSFS 2.4.0 · 169 OnePlus kernels" \
+            --notes-file release-notes.md
+

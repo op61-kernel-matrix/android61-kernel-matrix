@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "component": "ReKernel",
+  "status": "enabled-pinned-companion-module",
+  "purpose": "optional tombstone/crash diagnostics; not a gaming performance feature",
+  "official_source": "https://github.com/Sakion-Team/Re-Kernel",
+  "release": "11.7",
+  "source_commit": "e67cd94c524c27503cb340f8bbab594eca95dbef",
+  "archive_sha256": "892f0728899e48aa3e40fb2405c88b42eaa006338c49dacf10375f5c4e9d78b6",
+  "integration": "separate optional LKM or Magisk module on kernels 5.10 and newer",
+  "supported_kmi_families_to_validate": ["5.10", "5.15", "6.1", "6.6", "6.12"],
+  "build_gates": ["official archive SHA-256 matches", "a module matching target Android/KMI exists", "selected module SHA-256 is recorded in the artifact", "official next-boot disable recovery remains present"],
+  "never": ["inject one universal module into all 169 kernels", "enable by default without per-KMI tests", "treat diagnostic hooks as a frame-rate optimization"]
+}
