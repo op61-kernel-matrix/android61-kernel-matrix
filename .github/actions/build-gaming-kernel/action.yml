@@ -1451,7 +1451,7 @@ runs:
            [ "${{ env.KERNEL_VER }}" = "5.10" ] && \
            [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
           echo "Completing NostalgiKSU 33198 exec hooks for Android 12 / 5.10..."
-          python3 "$GITHUB_WORKSPACE/.github/scripts/complete-nostalgiksu-510-exec-hooks.py" fs/exec.c
+          python3 "$GITHUB_WORKSPACE/.github/scripts/complete-nostalgiksu-33198-510-exec-hooks.py" fs/exec.c
         fi
 
         if [ "${{ inputs.ksu_type }}" = "BakaSU" ]; then
@@ -3213,7 +3213,7 @@ runs:
         mv "$ZIP_NAME" "$ARTIFACTS_FOLDER/"
 
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-ak3.sh" \
+          bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-gaming-ak3.sh" \
             "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
         fi
         
