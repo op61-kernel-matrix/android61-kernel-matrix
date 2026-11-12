@@ -17,6 +17,7 @@ if [ -d "$AKHOME/rekernel-module" ]; then
   rm -rf /data/adb/modules/re_kernel.new
   mkdir -p /data/adb/modules/re_kernel.new
   cp -af "$AKHOME/rekernel-module/." /data/adb/modules/re_kernel.new/
+  mv /data/adb/modules/re_kernel.new/manifest.payload /data/adb/modules/re_kernel.new/module.prop
   chmod 0755 /data/adb/modules/re_kernel.new/post-fs-data.sh
   rm -rf /data/adb/modules/re_kernel
   mv /data/adb/modules/re_kernel.new /data/adb/modules/re_kernel
@@ -27,6 +28,7 @@ if [ -d "$AKHOME/nostalgiksu-gaming-module" ]; then
   rm -rf /data/adb/modules/nostalgiksu_gaming.new
   mkdir -p /data/adb/modules/nostalgiksu_gaming.new
   cp -af "$AKHOME/nostalgiksu-gaming-module/." /data/adb/modules/nostalgiksu_gaming.new/
+  mv /data/adb/modules/nostalgiksu_gaming.new/manifest.payload /data/adb/modules/nostalgiksu_gaming.new/module.prop
   chmod 0755 /data/adb/modules/nostalgiksu_gaming.new/*.sh
   rm -rf /data/adb/modules/nostalgiksu_gaming
   mv /data/adb/modules/nostalgiksu_gaming.new /data/adb/modules/nostalgiksu_gaming

@@ -3184,11 +3184,12 @@ runs:
             exit 1
           }
           selected_rekernel="${rekernel_candidates[-1]}"
-          cp /tmp/rekernel-11.7/module.prop /tmp/rekernel-11.7/post-fs-data.sh rekernel-module/
+          cp /tmp/rekernel-11.7/module.prop rekernel-module/manifest.payload
+          cp /tmp/rekernel-11.7/post-fs-data.sh rekernel-module/
           cp "$selected_rekernel" rekernel-module/
           chmod 0755 rekernel-module/post-fs-data.sh
           cp "$GITHUB_WORKSPACE/gaming/runtime/"*.sh nostalgiksu-gaming-module/
-          cp "$GITHUB_WORKSPACE/gaming/runtime/module.prop" nostalgiksu-gaming-module/
+          cp "$GITHUB_WORKSPACE/gaming/runtime/module.prop" nostalgiksu-gaming-module/manifest.payload
           chmod 0755 nostalgiksu-gaming-module/*.sh
           sha256sum "$selected_rekernel" > rekernel-module/MODULE-SHA256.txt
           printf '%s\n' 'e67cd94c524c27503cb340f8bbab594eca95dbef' > rekernel-module/SOURCE-COMMIT.txt

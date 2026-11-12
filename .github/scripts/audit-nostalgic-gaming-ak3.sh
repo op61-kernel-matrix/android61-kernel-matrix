@@ -36,6 +36,18 @@ grep -Fq 'OKI Kernel Supported:' "$installer"
 grep -Fq 'Built with love by NOSTALGIC @Reals3s' "$installer"
 grep -Fq 'Core stack: NostalgiKSU 33198-6 + NOSTALGIC SuSFS 2.4.0 GKI-2' "$installer"
 grep -Fq 'Credits: OnePlus OSS, NostalgiKSU contributors and AnyKernel3.' "$installer"
+grep -Fq 'mv /data/adb/modules/re_kernel.new/manifest.payload /data/adb/modules/re_kernel.new/module.prop' "$installer"
+grep -Fq 'mv /data/adb/modules/nostalgiksu_gaming.new/manifest.payload /data/adb/modules/nostalgiksu_gaming.new/module.prop' "$installer"
+
+# Kernel managers classify an archive containing module.prop as a module ZIP
+# before AnyKernel3 can run. Carry neutral payload names and restore the two
+# module manifests only after the AK3 installer has started.
+[[ -s "$audit_dir/rekernel-module/manifest.payload" ]]
+[[ -s "$audit_dir/nostalgiksu-gaming-module/manifest.payload" ]]
+if find "$audit_dir" -type f -name module.prop -print -quit | grep -q .; then
+  echo "::error::$zip_name contains module.prop and will be rejected as a module ZIP"
+  exit 1
+fi
 
 # Audit only installer-visible text. Upstream branch names and implementation
 # sources remain legitimate build inputs and are deliberately not rewritten.
