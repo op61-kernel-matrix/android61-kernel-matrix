@@ -2619,8 +2619,16 @@ runs:
           scripts/config --file "$OUT/.config" -e CPU_FREQ_GOV_SCHEDUTIL
           scripts/config --file "$OUT/.config" -d WQ_POWER_EFFICIENT_DEFAULT
           scripts/config --file "$OUT/.config" -e PSI
-          scripts/config --file "$OUT/.config" -e LRU_GEN
-          scripts/config --file "$OUT/.config" -e LRU_GEN_ENABLED
+          MGLRU_SUPPORTED=false
+          MGLRU_DEFAULT_SUPPORTED=false
+          if grep -RqsE '^[[:space:]]*config[[:space:]]+LRU_GEN([[:space:]]|$)' mm; then
+            MGLRU_SUPPORTED=true
+            scripts/config --file "$OUT/.config" -e LRU_GEN
+          fi
+          if grep -RqsE '^[[:space:]]*config[[:space:]]+LRU_GEN_ENABLED([[:space:]]|$)' mm; then
+            MGLRU_DEFAULT_SUPPORTED=true
+            scripts/config --file "$OUT/.config" -e LRU_GEN_ENABLED
+          fi
         fi
 
         # The N6/N6X vendor defconfigs build OPLUS_NFC together with the external
@@ -2641,19 +2649,33 @@ runs:
             'CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y' \
             'CONFIG_NTSYNC=y' \
             'CONFIG_LTO_CLANG_THIN=y' \
-            'CONFIG_PSI=y' \
-            'CONFIG_LRU_GEN=y' \
-            'CONFIG_LRU_GEN_ENABLED=y'; do
+            'CONFIG_PSI=y'; do
             grep -qxF "$required" "$OUT/.config" || {
               echo "::error::Gaming profile requirement missing after olddefconfig: $required"
               exit 1
             }
           done
+          if [ "$MGLRU_SUPPORTED" = true ]; then
+            grep -qxF 'CONFIG_LRU_GEN=y' "$OUT/.config" || {
+              echo '::error::MGLRU is supported by this tree but CONFIG_LRU_GEN did not survive olddefconfig'
+              exit 1
+            }
+          fi
+          if [ "$MGLRU_DEFAULT_SUPPORTED" = true ]; then
+            grep -qxF 'CONFIG_LRU_GEN_ENABLED=y' "$OUT/.config" || {
+              echo '::error::The MGLRU default-enable symbol exists but did not survive olddefconfig'
+              exit 1
+            }
+          fi
           grep -qxF '# CONFIG_WQ_POWER_EFFICIENT_DEFAULT is not set' "$OUT/.config" || {
             echo '::error::Gaming profile requires latency-first workqueue defaults'
             exit 1
           }
-          echo 'Gaming profile passed: uclamp, schedutil, NTSync, ThinLTO, PSI, MGLRU and latency-first workqueues.'
+          if [ "$MGLRU_SUPPORTED" = true ]; then
+            echo 'Gaming profile passed: uclamp, schedutil, NTSync, ThinLTO, PSI, MGLRU and latency-first workqueues.'
+          else
+            echo 'Gaming profile passed: uclamp, schedutil, NTSync, ThinLTO, PSI and latency-first workqueues; this legacy tree has no MGLRU Kconfig capability.'
+          fi
           echo 'Vendor thermal mitigation and critical shutdown remain untouched.'
         fi
         
