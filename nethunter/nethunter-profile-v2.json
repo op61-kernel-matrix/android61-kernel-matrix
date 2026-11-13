@@ -1,0 +1,32 @@
+{
+  "profile": "NOSTALGIC-NETHUNTER",
+  "version": 2,
+  "base": "stable-reference/33197-6/oneplus-full-169-matrix.yml",
+  "root_stack": "NostalgiKSU 33198-6 + SuSFS 2.4.0",
+  "policy": {
+    "preserve_vendor_thermal_and_security": true,
+    "gaming_tuning": false,
+    "rekernel": false,
+    "force_ntsync": false,
+    "force_bbr": false,
+    "override_lto": false,
+    "external_wifi_and_usb_serial_modular_where_supported": true,
+    "unsupported_optional_symbols_are_reported": true,
+    "supported_symbols_must_survive_olddefconfig": true
+  },
+  "capability_groups": [
+    "networking-tun-tap-and-packet-diagnostics",
+    "netfilter-nftables-ipset-and-ipv6-nat",
+    "namespaces-cgroups-overlay-and-fuse",
+    "usb-host-monitor-and-hid-input",
+    "external-wireless-adapters",
+    "usb-serial-adapters"
+  ],
+  "deferred_until_physical_pilot_boots": [
+    "usb-gadget-and-configfs-functions",
+    "dwc3-dual-role-forcing",
+    "bluetooth",
+    "sdr-and-dvb",
+    "can"
+  ]
+}

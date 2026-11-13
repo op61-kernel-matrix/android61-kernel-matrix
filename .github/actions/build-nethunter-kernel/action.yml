@@ -2224,40 +2224,6 @@ runs:
           exit 1
         fi
     
-    - name: Add USB DWC3 & OTG Support
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Add USB DWC3 Configuration"
-        
-        cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<EOF
-        CONFIG_USB_DWC3=y
-        CONFIG_USB_DWC3_DUAL_ROLE=y
-        CONFIG_USB_GADGET=y
-        CONFIG_USB_CONFIGFS=y
-        CONFIG_TYPEC=y
-        EOF
-
-        if [[ "${OP_BRANCH,,}${OP_SOC,,}" == *"mt"* ]]; then
-            echo "Detected MediaTek (mt). Adding MTK USB PHY configs..."
-            cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<EOF
-        CONFIG_USB_DWC3_MTK=y
-        CONFIG_PHY_MTK_TPHY=y
-        EOF
-        elif [[ "${OP_BRANCH,,}${OP_SOC,,}" == *"sm"* ]]; then
-            echo "Detected Qualcomm (sm). Adding QCOM USB PHY configs..."
-            cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<EOF
-        CONFIG_USB_DWC3_QCOM=y
-        CONFIG_PHY_QCOM_QMP=y
-        CONFIG_PHY_QCOM_USB_HS=y
-        EOF
-        else
-            echo "⚠️ Unrecognized hardware. Falling back to generic DWC3 configs."
-        fi
-
-        echo "✅ Dynamic USB DWC3 configs added"
-        echo "::endgroup::"
-
     - name: Add LXC / Droidspaces support
       shell: bash
       if: ${{ env.OP_LXC_DS == 'true' }}
@@ -2612,15 +2578,11 @@ runs:
         esac
 
         if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
-          # Enable every NetHunter capability exposed by this vendor tree.
-          # Unsupported optional adapter drivers are recorded in the artifact;
-          # cross-family core capabilities remain a strict build contract.
-          NETHUNTER_SYMBOLS=(
-            NET INET USB_SUPPORT USB USB_HOST USB_XHCI_HCD USB_XHCI_PLATFORM USB_DWC3 USB_DWC3_DUAL_ROLE
-            USB_GADGET USB_CONFIGFS USB_CONFIGFS_F_HID USB_CONFIGFS_F_MASS_STORAGE
-            USB_CONFIGFS_F_ACM USB_CONFIGFS_F_SERIAL USB_CONFIGFS_F_OBEX
-            USB_CONFIGFS_RNDIS USB_CONFIGFS_NCM USB_CONFIGFS_ECM USB_CONFIGFS_ECM_SUBSET
-            USB_CONFIGFS_EEM USB_MON HID HIDRAW UHID USB_HID
+          # V2 is deliberately additive and boot-safe. It does not force USB
+          # gadget/configfs, DWC3 role changes, Bluetooth, SDR/DVB or CAN.
+          NETHUNTER_BUILTIN_SYMBOLS=(
+            NET INET USB_SUPPORT USB USB_HOST USB_XHCI_HCD USB_XHCI_PLATFORM USB_MON
+            HID HIDRAW UHID USB_HID
             TUN TAP PACKET PACKET_DIAG UNIX UNIX_DIAG INET_DIAG INET_UDP_DIAG
             NETFILTER NETFILTER_ADVANCED NF_TABLES NF_TABLES_INET NF_TABLES_IPV4 NF_TABLES_IPV6
             NFT_CT NFT_LOG NFT_LIMIT NFT_NAT NFT_REJECT NFT_MASQ
@@ -2631,20 +2593,26 @@ runs:
             OVERLAY_FS FUSE_FS CUSE AUTOFS_FS DEVTMPFS DEVTMPFS_MOUNT DEVPTS_MULTIPLE_INSTANCES
             SYSVIPC POSIX_MQUEUE TMPFS TMPFS_XATTR TMPFS_POSIX_ACL NFS_FS NFS_V3 NFS_V4 CIFS SMB_SERVER
             NETWORK_FILESYSTEMS WIRELESS RFKILL WLAN CFG80211 MAC80211 MAC80211_MESH USB_NET_DRIVERS USB_USBNET
+          )
+          NETHUNTER_MODULE_SYMBOLS=(
             ATH9K_HTC ATH10K ATH10K_USB CARL9170 ATH6KL ATH6KL_USB
             RT2X00 RT2500USB RT73USB RT2800USB MT7601U MT76 MT76_USB
             RTL8187 RTL8XXXU R8188EU RTL8812AU RTL8814AU RTL88XXAU RTW88 RTW88_USB
-            BT BT_RFCOMM BT_BNEP BT_HIDP BT_HCIBTUSB BT_HCIUART BT_HCIUART_H4 BT_HCIVHCI
             USB_SERIAL USB_SERIAL_CH341 USB_SERIAL_CP210X USB_SERIAL_FTDI_SIO USB_SERIAL_PL2303
-            MEDIA_SUPPORT MEDIA_USB_SUPPORT DVB_CORE DVB_USB_V2 DVB_USB_RTL28XXU
-            MEDIA_SDR_SUPPORT USB_AIRSPY USB_HACKRF
-            CAN CAN_RAW CAN_BCM CAN_GW CAN_VCAN CAN_SLCAN CAN_DEV CAN_GS_USB CAN_USB
           )
           : > "$OUT/nethunter-requested-symbols.txt"
           : > "$OUT/nethunter-unsupported-symbols.txt"
-          for symbol in "${NETHUNTER_SYMBOLS[@]}"; do
+          for symbol in "${NETHUNTER_BUILTIN_SYMBOLS[@]}"; do
             if grep -RqsE "^[[:space:]]*(menu)?config[[:space:]]+${symbol}([[:space:]]|$)" --include='Kconfig*' .; then
               scripts/config --file "$OUT/.config" -e "$symbol" || true
+              printf 'CONFIG_%s\n' "$symbol" >> "$OUT/nethunter-requested-symbols.txt"
+            else
+              printf 'CONFIG_%s\n' "$symbol" >> "$OUT/nethunter-unsupported-symbols.txt"
+            fi
+          done
+          for symbol in "${NETHUNTER_MODULE_SYMBOLS[@]}"; do
+            if grep -RqsE "^[[:space:]]*(menu)?config[[:space:]]+${symbol}([[:space:]]|$)" --include='Kconfig*' .; then
+              scripts/config --file "$OUT/.config" -m "$symbol" || true
               printf 'CONFIG_%s\n' "$symbol" >> "$OUT/nethunter-requested-symbols.txt"
             else
               printf 'CONFIG_%s\n' "$symbol" >> "$OUT/nethunter-unsupported-symbols.txt"
@@ -2673,10 +2641,10 @@ runs:
               printf '%s\n' "$config_symbol" >> "$OUT/nethunter-unresolved-symbols.txt"
             fi
           done < "$OUT/nethunter-requested-symbols.txt"
-          for required in CONFIG_USB=y CONFIG_USB_GADGET=y CONFIG_USB_CONFIGFS=y \
-            CONFIG_USB_DWC3=y CONFIG_USB_DWC3_DUAL_ROLE=y CONFIG_TUN=y CONFIG_PACKET=y \
+          for required in CONFIG_USB=y CONFIG_USB_HOST=y CONFIG_USB_MON=y \
+            CONFIG_HID=y CONFIG_HIDRAW=y CONFIG_TUN=y CONFIG_PACKET=y CONFIG_PACKET_DIAG=y \
             CONFIG_NETFILTER=y CONFIG_NAMESPACES=y CONFIG_NET_NS=y CONFIG_PID_NS=y \
-            CONFIG_SYSVIPC=y CONFIG_TMPFS=y; do
+            CONFIG_CGROUPS=y CONFIG_OVERLAY_FS=y CONFIG_FUSE_FS=y CONFIG_SYSVIPC=y CONFIG_TMPFS=y; do
             grep -qxF "$required" "$OUT/.config" || {
               echo "::error::NetHunter core requirement missing after olddefconfig: $required"
               exit 1
@@ -3181,7 +3149,7 @@ runs:
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-enabled-symbols.txt" .
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unresolved-symbols.txt" .
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unsupported-symbols.txt" .
-          cp "$GITHUB_WORKSPACE/nethunter/nethunter-profile-v1.json" .
+          cp "$GITHUB_WORKSPACE/nethunter/nethunter-profile-v2.json" .
         fi
 
         # Fatal's proven source is intentionally retained, but none of its

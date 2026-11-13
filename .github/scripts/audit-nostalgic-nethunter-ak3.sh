@@ -15,7 +15,7 @@ audit_dir=$(mktemp -d)
 trap 'rm -rf "$audit_dir"' EXIT
 unzip -q "$zip_path" -d "$audit_dir"
 
-for required in Image anykernel.sh banner nethunter-profile-v1.json \
+for required in Image anykernel.sh banner nethunter-profile-v2.json \
   nethunter-enabled-symbols.txt nethunter-unresolved-symbols.txt \
   nethunter-unsupported-symbols.txt; do
   [[ -s "$audit_dir/$required" ]] || {
@@ -23,6 +23,13 @@ for required in Image anykernel.sh banner nethunter-profile-v1.json \
     exit 1
   }
 done
+
+jq -e '.profile == "NOSTALGIC-NETHUNTER" and .version == 2 and
+  .policy.gaming_tuning == false and .policy.rekernel == false and
+  .policy.force_ntsync == false and .policy.force_bbr == false and
+  .policy.override_lto == false and
+  (.deferred_until_physical_pilot_boots | length) == 5' \
+  "$audit_dir/nethunter-profile-v2.json" >/dev/null
 
 expected_banner="$GITHUB_WORKSPACE/.github/actions/build-nethunter-kernel/assets/nostalgiksu-banner"
 cmp -s "$audit_dir/banner" "$expected_banner" || {

@@ -43,8 +43,8 @@ env:
   SUSFS_REPOSITORY: https://gitlab.com/simonpunk/susfs4ksu.git
   REQUIRED_SUSFS_VERSION: "2.4.0"
   EXPERIMENTAL_LAB: "NostalgiKSU NetHunter Kernel Lab"
-  NETHUNTER_PROFILE_VERSION: "1"
-  NETHUNTER_FEATURE_POLICY: "all-source-supported-capabilities"
+  NETHUNTER_PROFILE_VERSION: "2"
+  NETHUNTER_FEATURE_POLICY: "boot-safe-fundamentals"
   NETHUNTER_SAFETY_POLICY: "retain-vendor-thermal-security-and-critical-shutdown"
   STABLE_WORKFLOW_SHA256: "04d39cbebfe1b22bbc8d3355af7726f466656211e29c2ff9aca6c944e4ff8b2c"
 
@@ -74,10 +74,10 @@ jobs:
           baseline='stable-reference/33197-6/oneplus-full-169-matrix.yml'
           test -s "$baseline"
           echo "$STABLE_WORKFLOW_SHA256  $baseline" | sha256sum --check --strict
-          [ "$NETHUNTER_FEATURE_POLICY" = all-source-supported-capabilities ]
+          [ "$NETHUNTER_FEATURE_POLICY" = boot-safe-fundamentals ]
           [ "$NETHUNTER_SAFETY_POLICY" = retain-vendor-thermal-security-and-critical-shutdown ]
           jq -e '.profile == "NOSTALGIC-NETHUNTER" and .policy.gaming_tuning == false and .policy.rekernel == false' \
-            nethunter/nethunter-profile-v1.json >/dev/null
+            nethunter/nethunter-profile-v2.json >/dev/null
           cmp -s "$baseline" '.github/workflows/oneplus-full-169-matrix.yml'
 
       - name: Resolve and validate SuSFS 2.4.0 family and per-device data
@@ -288,7 +288,7 @@ jobs:
             --arg family 'android14-6.1' \
             --arg commit '${{ needs.prepare.outputs.pilot_susfs_ref }}' \
             '.susfs=true | .susfs_version=$version | .susfs_family=$family | .susfs_commit=$commit |
-             .ntsync=true | .bbr=true | .bbr3=true | .lto="thin" | .nethunter_profile=true' \
+             .nethunter_profile=true' \
             "$PILOT_CONFIG")
           jq -e '.model == "OP13r-6.1.141" and
                  .manifest == "oneplus_13r_6.1.141_w.xml" and
@@ -375,7 +375,7 @@ jobs:
           JSON=$(jq -c --arg version "$EXPECTED_SUSFS_VERSION" \
             --arg family "$EXPECTED_FAMILY" --arg commit "$EXPECTED_SUSFS_COMMIT" \
             '.susfs=true | .susfs_version=$version | .susfs_family=$family | .susfs_commit=$commit |
-             .ntsync=true | .bbr=true | .bbr3=true | .lto="thin" | .nethunter_profile=true' \
+             .nethunter_profile=true' \
             "$CONFIG_PATH")
           family=$(jq -r '"\(.android_version)-\(.kernel_version)"' <<<"$JSON")
           [ "$family" = "$EXPECTED_FAMILY" ]
@@ -385,7 +385,7 @@ jobs:
             <<<"$JSON" >/dev/null
           echo "json=$JSON" >> "$GITHUB_OUTPUT"
 
-      - name: Build and audit complete NetHunter capability profile
+      - name: Build and audit boot-safe NetHunter fundamentals
         id: build
         uses: ./.github/actions/build-nethunter-kernel
         with:
@@ -471,8 +471,10 @@ jobs:
             echo '- **169/169 experimental nethunter kernels built and audited**'
             echo '- **Clock policy:** device-advertised stock maximum only; no invented overclock tables'
             echo '- **Thermal policy:** vendor mitigation and critical shutdown retained'
-            echo '- **NetHunter profile:** USB gadget/HID/networking/serial, external wireless, Bluetooth/UART, namespaces/chroot, netfilter/nftables/IPSet, SDR and CAN where supported by each source tree'
-            echo '- **Isolation:** no gaming scheduler tuning and no ReKernel payload'
+            echo '- **NetHunter v2 profile:** networking, TUN/TAP, packet diagnostics, netfilter/nftables/IPSet, namespaces/cgroups, overlay/FUSE, USB host/monitor, HID input, and safe external adapters where supported'
+            echo '- **Adapter policy:** external Wi-Fi and USB-serial drivers are requested as modules where Kconfig permits'
+            echo '- **Deferred until a physical pilot boots:** USB gadget/configfs functions, forced DWC3 dual-role, Bluetooth, SDR/DVB and CAN'
+            echo '- **Isolation:** no forced NTSync, BBR/BBR3, LTO override, gaming/performance tuning, or ReKernel payload'
             echo '- **Pilot:** OnePlus 13R Android 16, kernel 6.1.141'
             echo '- **NostalgiKSU:** 33198-6 (`v1.6.1-250c9e77@HEAD`)'
             echo '- **SuSFS:** 2.4.0 from immutable per-family pins'
