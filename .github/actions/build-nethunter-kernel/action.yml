@@ -2581,7 +2581,7 @@ runs:
           # V2 is deliberately additive and boot-safe. It does not force USB
           # gadget/configfs, DWC3 role changes, Bluetooth, SDR/DVB or CAN.
           NETHUNTER_BUILTIN_SYMBOLS=(
-            NET INET USB_SUPPORT USB USB_HOST USB_XHCI_HCD USB_XHCI_PLATFORM USB_MON
+            NET INET USB_SUPPORT USB USB_XHCI_HCD USB_XHCI_PLATFORM USB_MON
             HID HIDRAW UHID USB_HID
             TUN TAP PACKET PACKET_DIAG UNIX UNIX_DIAG INET_DIAG INET_UDP_DIAG
             NETFILTER NETFILTER_ADVANCED NF_TABLES NF_TABLES_INET NF_TABLES_IPV4 NF_TABLES_IPV6
@@ -2641,7 +2641,7 @@ runs:
               printf '%s\n' "$config_symbol" >> "$OUT/nethunter-unresolved-symbols.txt"
             fi
           done < "$OUT/nethunter-requested-symbols.txt"
-          for required in CONFIG_USB=y CONFIG_USB_HOST=y CONFIG_USB_MON=y \
+          for required in CONFIG_USB=y CONFIG_USB_MON=y \
             CONFIG_HID=y CONFIG_HIDRAW=y CONFIG_TUN=y CONFIG_PACKET=y CONFIG_PACKET_DIAG=y \
             CONFIG_NETFILTER=y CONFIG_NAMESPACES=y CONFIG_NET_NS=y CONFIG_PID_NS=y \
             CONFIG_CGROUPS=y CONFIG_OVERLAY_FS=y CONFIG_FUSE_FS=y CONFIG_SYSVIPC=y CONFIG_TMPFS=y; do
@@ -2650,6 +2650,10 @@ runs:
               exit 1
             }
           done
+          grep -qE '^CONFIG_USB_(XHCI|EHCI|OHCI)_HCD=(y|m)$' "$OUT/.config" || {
+            echo "::error::NetHunter USB host requirement missing after olddefconfig: no enabled host controller"
+            exit 1
+          }
           echo "NetHunter capability audit: $(wc -l < "$OUT/nethunter-enabled-symbols.txt") enabled, $(wc -l < "$OUT/nethunter-unresolved-symbols.txt") dependency-gated, $(wc -l < "$OUT/nethunter-unsupported-symbols.txt") absent."
           echo 'Vendor thermal mitigation, critical shutdown and security policy remain untouched.'
         fi
