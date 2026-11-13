@@ -1,6 +1,7 @@
 {
   "profile": "NOSTALGIC-NETHUNTER",
   "version": 2,
+  "revision": 2,
   "base": "stable-reference/33197-6/oneplus-full-169-matrix.yml",
   "root_stack": "NostalgiKSU 33198-6 + SuSFS 2.4.0",
   "policy": {
@@ -11,6 +12,8 @@
     "force_bbr": false,
     "override_lto": false,
     "external_wifi_and_usb_serial_modular_where_supported": true,
+    "modular_adapters_compiled_and_packaged": true,
+    "modular_adapters_auto_loaded_at_boot": false,
     "unsupported_optional_symbols_are_reported": true,
     "supported_symbols_must_survive_olddefconfig": true
   },

@@ -2702,6 +2702,13 @@ runs:
           cp "$COMMON_KERNEL_FOLDER/out/System.map" "$DEBUG_ARTIFACTS_FOLDER/System.map"
           
           ls -la "$DEBUG_ARTIFACTS_FOLDER"
+        elif [ "${{ inputs.nethunter_profile }}" = "true" ]; then
+          # NetHunter adapter support is only real when every =m selection is
+          # compiled and staged for packaging. Keep modules unloaded at boot;
+          # the AnyKernel helper exposes them systemlessly for explicit use.
+          make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image modules 2>&1 | tee build.log
+          rm -rf "$OUT/install"
+          make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" INSTALL_MOD_PATH="$OUT/install" modules_install 2>&1 | tee install.log
         else
           make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image 2>&1 | tee build.log
         fi
@@ -3154,6 +3161,80 @@ runs:
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unresolved-symbols.txt" .
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unsupported-symbols.txt" .
           cp "$GITHUB_WORKSPACE/nethunter/nethunter-profile-v2.json" .
+
+          MODULE_INSTALL_ROOT="$COMMON_KERNEL_FOLDER/out/install/lib/modules"
+          MODULE_RELEASE_DIR=$(find "$MODULE_INSTALL_ROOT" -mindepth 1 -maxdepth 1 -type d -print -quit)
+          if [ -z "${MODULE_RELEASE_DIR:-}" ] || [ ! -d "$MODULE_RELEASE_DIR" ]; then
+            echo "::error::NetHunter modules_install output is missing"
+            exit 1
+          fi
+          MODULE_RELEASE=$(basename "$MODULE_RELEASE_DIR")
+          MODULE_DEST="modules/system/lib/modules/$MODULE_RELEASE"
+          mkdir -p "$MODULE_DEST"
+
+          # Package only boot-safe external adapter modules and their generated
+          # dependency metadata. Do not replace the device's complete vendor
+          # module set and do not auto-load any adapter during early boot.
+          while IFS= read -r -d '' module; do
+            relative=${module#"$MODULE_RELEASE_DIR/"}
+            case "$relative" in
+              kernel/drivers/net/wireless/*|kernel/drivers/staging/rtl8188eu/*|kernel/drivers/staging/rtl8712/*|kernel/drivers/usb/serial/*)
+                mkdir -p "$MODULE_DEST/$(dirname "$relative")"
+                cp "$module" "$MODULE_DEST/$relative"
+                ;;
+            esac
+          done < <(find "$MODULE_RELEASE_DIR" -type f -name '*.ko' -print0)
+
+          # Include the complete transitive dependency closure reported by the
+          # kernel's own modules.dep, even when a dependency lives outside the
+          # adapter driver directories selected above.
+          declare -A packaged_modules=()
+          while IFS= read -r -d '' module; do
+            packaged_modules[${module#"$MODULE_DEST/"}]=1
+          done < <(find "$MODULE_DEST" -type f -name '*.ko' -print0)
+          changed=1
+          while [ "$changed" -eq 1 ]; do
+            changed=0
+            while IFS=: read -r owner dependencies; do
+              [ -n "${packaged_modules[$owner]+present}" ] || continue
+              for dependency in $dependencies; do
+                [ -n "${packaged_modules[$dependency]+present}" ] && continue
+                if [ ! -f "$MODULE_RELEASE_DIR/$dependency" ]; then
+                  echo "::error::Missing dependency $dependency required by $owner"
+                  exit 1
+                fi
+                mkdir -p "$MODULE_DEST/$(dirname "$dependency")"
+                cp "$MODULE_RELEASE_DIR/$dependency" "$MODULE_DEST/$dependency"
+                packaged_modules[$dependency]=1
+                changed=1
+              done
+            done < "$MODULE_RELEASE_DIR/modules.dep"
+          done
+
+          MODULE_COUNT=$(find "$MODULE_DEST" -type f -name '*.ko' | wc -l)
+          REQUESTED_MODULE_COUNT=$(grep -c '=m$' nethunter-enabled-symbols.txt || true)
+          if [ "$REQUESTED_MODULE_COUNT" -gt 0 ] && [ "$MODULE_COUNT" -eq 0 ]; then
+            echo "::error::NetHunter requested modular adapters but packaged no .ko payloads"
+            exit 1
+          fi
+          find "$MODULE_DEST" -type f -name '*.ko' -print0 | sort -z | xargs -0 -r sha256sum > nethunter-modules.sha256
+          : > nethunter-modules.txt
+          while IFS= read -r -d '' module; do
+            modinfo -F name "$module" >> nethunter-modules.txt
+          done < <(find "$MODULE_DEST" -type f -name '*.ko' -print0 | sort -z)
+          sort -u -o nethunter-modules.txt nethunter-modules.txt
+          depmod -b modules/system "$MODULE_RELEASE"
+
+          mkdir -p modules
+          cat > modules/post-fs-data.sh <<'EOF'
+        #!/system/bin/sh
+        # NetHunter v2 deliberately does not auto-load external adapter modules.
+        # Load only the driver required for attached hardware after Android boots.
+        exit 0
+        EOF
+          chmod 0755 modules/post-fs-data.sh
+          sed -i 's/do.modules=.*/do.modules=1/' anykernel.sh
+          sed -i 's/do.systemless=.*/do.systemless=1/' anykernel.sh
         fi
 
         # Fatal's proven source is intentionally retained, but none of its

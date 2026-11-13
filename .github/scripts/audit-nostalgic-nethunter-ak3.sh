@@ -17,14 +17,61 @@ unzip -q "$zip_path" -d "$audit_dir"
 
 for required in Image anykernel.sh banner nethunter-profile-v2.json \
   nethunter-enabled-symbols.txt nethunter-unresolved-symbols.txt \
-  nethunter-unsupported-symbols.txt; do
+  nethunter-unsupported-symbols.txt modules/post-fs-data.sh; do
   [[ -s "$audit_dir/$required" ]] || {
     echo "::error::$zip_name is missing required payload: $required"
     exit 1
   }
 done
+for manifest in nethunter-modules.txt nethunter-modules.sha256; do
+  [[ -f "$audit_dir/$manifest" ]] || {
+    echo "::error::$zip_name is missing required payload: $manifest"
+    exit 1
+  }
+done
 
-jq -e '.profile == "NOSTALGIC-NETHUNTER" and .version == 2 and
+grep -Fqx 'do.modules=1' "$audit_dir/anykernel.sh"
+grep -Fqx 'do.systemless=1' "$audit_dir/anykernel.sh"
+module_count=$(find "$audit_dir/modules/system/lib/modules" -type f -name '*.ko' | wc -l)
+requested_module_count=$(grep -c '=m$' "$audit_dir/nethunter-enabled-symbols.txt" || true)
+if [[ "$requested_module_count" -gt 0 && "$module_count" -eq 0 ]]; then
+  echo "::error::$zip_name requests modular NetHunter adapters but contains no .ko payloads"
+  exit 1
+fi
+if [[ "$requested_module_count" -gt 0 ]]; then
+  [[ -s "$audit_dir/nethunter-modules.txt" && -s "$audit_dir/nethunter-modules.sha256" ]] || {
+    echo "::error::$zip_name has modular adapters without non-empty module manifests"
+    exit 1
+  }
+fi
+while IFS= read -r enabled; do
+  [[ "$enabled" == CONFIG_*=m ]] || continue
+  symbol=${enabled#CONFIG_}
+  symbol=${symbol%=m}
+  case "$symbol" in
+    ATH10K) expected='ath10k_core' ;;
+    ATH6KL) expected='ath6kl_core' ;;
+    RT2X00) expected='rt2x00lib' ;;
+    MT76_USB) expected='mt76_usb' ;;
+    RTL8812AU) expected='8812au' ;;
+    RTL8814AU) expected='8814au' ;;
+    RTL88XXAU) expected='88xxau' ;;
+    RTW88) expected='rtw_core' ;;
+    RTW88_USB) expected='rtw_usb' ;;
+    USB_SERIAL) expected='usbserial' ;;
+    *) expected=$(tr '[:upper:]-' '[:lower:]_' <<<"$symbol") ;;
+  esac
+  if ! tr '[:upper:]-' '[:lower:]_' < "$audit_dir/nethunter-modules.txt" | grep -qxF "$expected"; then
+    echo "::error::$zip_name enables $enabled but does not package module $expected"
+    exit 1
+  fi
+done < "$audit_dir/nethunter-enabled-symbols.txt"
+(
+  cd "$audit_dir"
+  sha256sum --check --strict nethunter-modules.sha256
+)
+
+jq -e '.profile == "NOSTALGIC-NETHUNTER" and .version == 2 and .revision == 2 and
   .policy.gaming_tuning == false and .policy.rekernel == false and
   .policy.force_ntsync == false and .policy.force_bbr == false and
   .policy.override_lto == false and
