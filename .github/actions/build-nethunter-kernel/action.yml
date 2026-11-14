@@ -2991,6 +2991,18 @@ runs:
         fi
         
         cp "$IMAGE_PATH" "$AK3_FOLDER/Image"
+
+        # COMMON_KERNEL_FOLDER can be workspace-relative. Resolve module output
+        # before entering AnyKernel3 so packaging cannot reinterpret the path.
+        NETHUNTER_MODULE_INSTALL_ROOT=''
+        if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
+          candidate="$COMMON_KERNEL_FOLDER/out/install/lib/modules"
+          if [ ! -d "$candidate" ]; then
+            echo "::error::NetHunter modules_install output is missing: $candidate"
+            exit 1
+          fi
+          NETHUNTER_MODULE_INSTALL_ROOT=$(realpath "$candidate")
+        fi
         
         mv "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt" "$AK3_FOLDER/"
         cd "$AK3_FOLDER"
@@ -3162,7 +3174,7 @@ runs:
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unsupported-symbols.txt" .
           cp "$GITHUB_WORKSPACE/nethunter/nethunter-profile-v2.json" .
 
-          MODULE_INSTALL_ROOT="$COMMON_KERNEL_FOLDER/out/install/lib/modules"
+          MODULE_INSTALL_ROOT="$NETHUNTER_MODULE_INSTALL_ROOT"
           MODULE_RELEASE_DIR=$(find "$MODULE_INSTALL_ROOT" -mindepth 1 -maxdepth 1 -type d -print -quit)
           if [ -z "${MODULE_RELEASE_DIR:-}" ] || [ ! -d "$MODULE_RELEASE_DIR" ]; then
             echo "::error::NetHunter modules_install output is missing"
