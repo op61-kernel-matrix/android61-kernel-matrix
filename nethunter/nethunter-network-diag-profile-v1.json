@@ -1,0 +1,7 @@
+{
+  "profile": "NOSTALGIC-NETHUNTER-DIAG",
+  "version": 1,
+  "base": "NostalgiKSU 33198-6 + SuSFS 2.4.0 proven OP13R kernel",
+  "requested": ["CONFIG_PACKET_DIAG=y", "CONFIG_UNIX_DIAG=y"],
+  "excluded": ["nftables", "bridge-netfilter", "macvlan", "ipvlan", "usb", "hid", "adapter-modules"]
+}
