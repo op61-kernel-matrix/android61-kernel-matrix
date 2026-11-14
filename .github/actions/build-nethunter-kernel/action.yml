@@ -3190,7 +3190,7 @@ runs:
           while IFS= read -r -d '' module; do
             relative=${module#"$MODULE_RELEASE_DIR/"}
             case "$relative" in
-              kernel/drivers/net/wireless/*|kernel/drivers/staging/rtl8188eu/*|kernel/drivers/staging/rtl8712/*|kernel/drivers/usb/serial/*)
+              kernel/drivers/net/wireless/*|kernel/drivers/staging/r8188eu/*|kernel/drivers/staging/rtl8188eu/*|kernel/drivers/staging/rtl8712/*|kernel/drivers/usb/serial/*)
                 mkdir -p "$MODULE_DEST/$(dirname "$relative")"
                 cp "$module" "$MODULE_DEST/$relative"
                 ;;
