@@ -1,0 +1,20 @@
+{
+  "profile": "NOSTALGIC-NETHUNTER-NETWORK",
+  "version": 1,
+  "base": "NostalgiKSU 33198-6 + SuSFS 2.4.0 proven OP13R kernel",
+  "capabilities": [
+    "advanced-routing-and-multiple-tables",
+    "tun-tap-and-packet-diagnostics",
+    "network-namespaces-and-veth",
+    "bridge-vlan-macvlan-ipvlan",
+    "netfilter-nftables-ipset",
+    "ipv4-and-ipv6-nat"
+  ],
+  "excluded": [
+    "internal-wifi-and-mobile-drivers",
+    "usb-host-and-hid",
+    "external-wireless-and-usb-serial-modules",
+    "filesystem-and-non-network-namespace-expansion",
+    "gaming-and-scheduler-tuning"
+  ]
+}

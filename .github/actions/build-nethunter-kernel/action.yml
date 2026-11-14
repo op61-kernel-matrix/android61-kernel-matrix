@@ -35,6 +35,10 @@ inputs:
     description: 'Enable the isolated experimental NetHunter capability profile and its compatibility audit'
     required: false
     default: false
+  nethunter_profile_stage:
+    description: 'NetHunter profile stage: full or network'
+    required: false
+    default: full
   clean:
     description: 'Force clean build without ccache acceleration'
     required: false
@@ -2412,7 +2416,11 @@ runs:
         # retain their expected vermagic/KMI contract. NostalgiKSU identity is
         # reported through its own ABI, never by mutating kernel.release.
         if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
-          CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-NETHUNTER"
+          if [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
+            CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-NETHUNTER-NETWORK"
+          else
+            CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-NETHUNTER"
+          fi
         elif [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
           CUSTOM_LOCALVERSION="-${ANDROID_VER}-${OP_UNAME}"
         else
@@ -2578,9 +2586,24 @@ runs:
         esac
 
         if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
+          cp "$OUT/.config" "$OUT/nethunter-baseline.config"
           # V2 is deliberately additive and boot-safe. It does not force USB
           # gadget/configfs, DWC3 role changes, Bluetooth, SDR/DVB or CAN.
-          NETHUNTER_BUILTIN_SYMBOLS=(
+          if [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
+            NETHUNTER_BUILTIN_SYMBOLS=(
+              NET INET TUN TAP PACKET PACKET_DIAG UNIX UNIX_DIAG INET_DIAG INET_UDP_DIAG
+              IP_ADVANCED_ROUTER IP_MULTIPLE_TABLES IPV6_MULTIPLE_TABLES
+              NETFILTER NETFILTER_ADVANCED NF_TABLES NF_TABLES_INET NF_TABLES_IPV4 NF_TABLES_IPV6
+              NFT_CT NFT_LOG NFT_LIMIT NFT_NAT NFT_REJECT NFT_MASQ
+              IP_NF_IPTABLES IP_NF_FILTER IP_NF_MANGLE IP_NF_NAT IP_NF_TARGET_MASQUERADE
+              IP6_NF_IPTABLES IP6_NF_FILTER IP6_NF_MANGLE IP6_NF_NAT
+              IP_SET NETFILTER_XT_SET NETFILTER_XT_MATCH_ADDRTYPE
+              BRIDGE BRIDGE_NETFILTER VLAN_8021Q VETH MACVLAN IPVLAN
+              NAMESPACES NET_NS
+            )
+            NETHUNTER_MODULE_SYMBOLS=()
+          else
+            NETHUNTER_BUILTIN_SYMBOLS=(
             NET INET USB_SUPPORT USB USB_XHCI_HCD USB_XHCI_PLATFORM USB_MON
             HID HIDRAW UHID USB_HID
             TUN TAP PACKET PACKET_DIAG UNIX UNIX_DIAG INET_DIAG INET_UDP_DIAG
@@ -2600,6 +2623,7 @@ runs:
             RTL8187 RTL8XXXU R8188EU RTL8812AU RTL8814AU RTL88XXAU RTW88 RTW88_USB
             USB_SERIAL USB_SERIAL_CH341 USB_SERIAL_CP210X USB_SERIAL_FTDI_SIO USB_SERIAL_PL2303
           )
+          fi
           : > "$OUT/nethunter-requested-symbols.txt"
           : > "$OUT/nethunter-unsupported-symbols.txt"
           for symbol in "${NETHUNTER_BUILTIN_SYMBOLS[@]}"; do
@@ -2633,27 +2657,37 @@ runs:
 
         if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
           : > "$OUT/nethunter-enabled-symbols.txt"
+          : > "$OUT/nethunter-added-symbols.txt"
           : > "$OUT/nethunter-unresolved-symbols.txt"
           while IFS= read -r config_symbol; do
             if grep -qE "^${config_symbol}=(y|m)$" "$OUT/.config"; then
               grep -E "^${config_symbol}=(y|m)$" "$OUT/.config" >> "$OUT/nethunter-enabled-symbols.txt"
+              grep -qE "^${config_symbol}=(y|m)$" "$OUT/nethunter-baseline.config" || \
+                grep -E "^${config_symbol}=(y|m)$" "$OUT/.config" >> "$OUT/nethunter-added-symbols.txt"
             else
               printf '%s\n' "$config_symbol" >> "$OUT/nethunter-unresolved-symbols.txt"
             fi
           done < "$OUT/nethunter-requested-symbols.txt"
-          for required in CONFIG_USB=y CONFIG_USB_MON=y \
+          if [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
+            required_symbols=(CONFIG_TUN=y CONFIG_PACKET=y CONFIG_NETFILTER=y CONFIG_NET_NS=y)
+          else
+            required_symbols=(CONFIG_USB=y CONFIG_USB_MON=y \
             CONFIG_HID=y CONFIG_HIDRAW=y CONFIG_TUN=y CONFIG_PACKET=y CONFIG_PACKET_DIAG=y \
             CONFIG_NETFILTER=y CONFIG_NAMESPACES=y CONFIG_NET_NS=y CONFIG_PID_NS=y \
-            CONFIG_CGROUPS=y CONFIG_OVERLAY_FS=y CONFIG_FUSE_FS=y CONFIG_SYSVIPC=y CONFIG_TMPFS=y; do
+            CONFIG_CGROUPS=y CONFIG_OVERLAY_FS=y CONFIG_FUSE_FS=y CONFIG_SYSVIPC=y CONFIG_TMPFS=y)
+          fi
+          for required in "${required_symbols[@]}"; do
             grep -qxF "$required" "$OUT/.config" || {
               echo "::error::NetHunter core requirement missing after olddefconfig: $required"
               exit 1
             }
           done
-          grep -qE '^CONFIG_USB_(XHCI|EHCI|OHCI)_HCD=(y|m)$' "$OUT/.config" || {
+          if [ "${{ inputs.nethunter_profile_stage }}" != "network" ]; then
+            grep -qE '^CONFIG_USB_(XHCI|EHCI|OHCI)_HCD=(y|m)$' "$OUT/.config" || {
             echo "::error::NetHunter USB host requirement missing after olddefconfig: no enabled host controller"
             exit 1
-          }
+            }
+          fi
           echo "NetHunter capability audit: $(wc -l < "$OUT/nethunter-enabled-symbols.txt") enabled, $(wc -l < "$OUT/nethunter-unresolved-symbols.txt") dependency-gated, $(wc -l < "$OUT/nethunter-unsupported-symbols.txt") absent."
           echo 'Vendor thermal mitigation, critical shutdown and security policy remain untouched.'
         fi
@@ -2702,7 +2736,7 @@ runs:
           cp "$COMMON_KERNEL_FOLDER/out/System.map" "$DEBUG_ARTIFACTS_FOLDER/System.map"
           
           ls -la "$DEBUG_ARTIFACTS_FOLDER"
-        elif [ "${{ inputs.nethunter_profile }}" = "true" ]; then
+        elif [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" != "network" ]; then
           # NetHunter adapter support is only real when every =m selection is
           # compiled and staged for packaging. Keep modules unloaded at boot;
           # the AnyKernel helper exposes them systemlessly for explicit use.
@@ -2866,8 +2900,10 @@ runs:
           # NetHunter builds have one explicit lab identity regardless of the
           # source config's stock or compatibility uname placeholder.
           if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
+            EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER'
+            [ "${{ inputs.nethunter_profile_stage }}" != "network" ] || EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER-NETWORK'
             grep -Fq "Linux version ${OP_KERNEL_VERSION}." <<<"$KERNEL_UNAME" &&
-              grep -Fq -- "-${OP_ANDROID_VERSION}-NOSTALGIC-NETHUNTER" <<<"$KERNEL_UNAME" || {
+              grep -Fq -- "-${OP_ANDROID_VERSION}${EXPECTED_NH_SUFFIX}" <<<"$KERNEL_UNAME" || {
               echo "::error::Unexpected NOSTALGIC-NETHUNTER kernel uname: $KERNEL_UNAME"
               exit 1
             }
@@ -2996,7 +3032,7 @@ runs:
         # COMMON_KERNEL_FOLDER can be workspace-relative. Resolve module output
         # before entering AnyKernel3 so packaging cannot reinterpret the path.
         NETHUNTER_MODULE_INSTALL_ROOT=''
-        if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
+        if [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" != "network" ]; then
           candidate="$COMMON_KERNEL_FOLDER/out/install/lib/modules"
           if [ ! -d "$candidate" ]; then
             echo "::error::NetHunter modules_install output is missing: $candidate"
@@ -3171,10 +3207,16 @@ runs:
 
         if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-enabled-symbols.txt" .
+          cp "$COMMON_KERNEL_FOLDER/out/nethunter-added-symbols.txt" .
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unresolved-symbols.txt" .
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unsupported-symbols.txt" .
-          cp "$GITHUB_WORKSPACE/nethunter/nethunter-profile-v2.json" .
+          if [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
+            cp "$GITHUB_WORKSPACE/nethunter/nethunter-network-profile-v1.json" .
+          else
+            cp "$GITHUB_WORKSPACE/nethunter/nethunter-profile-v2.json" .
+          fi
 
+          if [ "${{ inputs.nethunter_profile_stage }}" != "network" ]; then
           MODULE_INSTALL_ROOT="$NETHUNTER_MODULE_INSTALL_ROOT"
           MODULE_RELEASE_DIR=$(find "$MODULE_INSTALL_ROOT" -mindepth 1 -maxdepth 1 -type d -print -quit)
           if [ -z "${MODULE_RELEASE_DIR:-}" ] || [ ! -d "$MODULE_RELEASE_DIR" ]; then
@@ -3248,6 +3290,12 @@ runs:
           chmod 0755 modules/post-fs-data.sh
           sed -i 's/do.modules=.*/do.modules=1/' anykernel.sh
           sed -i 's/do.systemless=.*/do.systemless=1/' anykernel.sh
+          else
+            : > nethunter-modules.txt
+            : > nethunter-modules.sha256
+            sed -i 's/do.modules=.*/do.modules=0/' anykernel.sh
+            sed -i 's/do.systemless=.*/do.systemless=0/' anykernel.sh
+          fi
         fi
 
         # Fatal's proven source is intentionally retained, but none of its
@@ -3270,7 +3318,11 @@ runs:
           test -n "${SUSVER:-}"
           PROFILE_SUFFIX=''
           if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
-            PROFILE_SUFFIX='_NOSTALGIC-NETHUNTER'
+            if [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
+              PROFILE_SUFFIX='_NOSTALGIC-NETHUNTER-NETWORK'
+            else
+              PROFILE_SUFFIX='_NOSTALGIC-NETHUNTER'
+            fi
           fi
           ZIP_NAME="NOSTALGIC-AK3_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_NKSU_33198-6_SuSFS_${SUSVER}${PROFILE_SUFFIX}.zip"
         elif [ "${{ env.OP_SUSFS }}" = true ]; then
@@ -3292,7 +3344,10 @@ runs:
         
         mv "$ZIP_NAME" "$ARTIFACTS_FOLDER/"
 
-        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ]; then
+        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
+          bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-nethunter-network-ak3.sh" \
+            "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
+        elif [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ]; then
           bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-nethunter-ak3.sh" \
             "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
         elif [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
