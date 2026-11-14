@@ -2788,6 +2788,10 @@ runs:
             RTW88_SOURCE="$COMMON_KERNEL_FOLDER/rtw88-nethunter"
             git clone --filter=blob:none https://github.com/lwfinger/rtw88 "$RTW88_SOURCE"
             git -C "$RTW88_SOURCE" checkout f1dd7c3a5b87478ab23c3dbb1f8f0d6b82f3f71c
+            # Match the proven 6.1.176 WirelessKSU payload: USB adapters and
+            # their chip cores only. Do not compile unrelated PCI/SDIO buses.
+            sed -i -E '/obj-m[[:space:]]*\+=[[:space:]]*rtw_(8723b|8723bs|8723cs|8723de|8723ds|8812ae|8814ae|8821ae|8821ce|8821cs|8822be|8822bs|8822ce|8822cs|pci|sdio)\.o/d' \
+              "$RTW88_SOURCE/Makefile"
             make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" \
               -j"$(nproc --all)" O="$OUT" M="$RTW88_SOURCE" \
               KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" modules 2>&1 | tee rtw88-build.log
