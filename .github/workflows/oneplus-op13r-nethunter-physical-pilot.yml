@@ -99,15 +99,16 @@ jobs:
           jq -e '.nethunter_profile != true' <<<"$JSON" >/dev/null
           echo "json=$JSON" >> "$GITHUB_OUTPUT"
 
-      - name: Build stable control image
+      - name: Build 33198 control image
         id: build
-        uses: ./.github/actions/build-kernel
+        uses: ./.github/actions/build-nethunter-kernel
         with:
           op_config_json: ${{ steps.config.outputs.json }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           ksu_type: NostalgiKSU
           susfs_commit_hash_or_branch: ${{ steps.control.outputs.susfs_ref }}
           optimize_level: O2
+          nethunter_profile: false
           clean: false
           debug: ${{ inputs.debug }}
 
@@ -120,7 +121,7 @@ jobs:
           ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$ZIP_PATH"
           [[ "$ZIP_NAME" != *NOSTALGIC-NETHUNTER* ]]
-          bash .github/scripts/audit-nostalgic-ak3.sh "$ZIP_PATH" 'OP13r-6.1.141'
+          bash .github/scripts/audit-nostalgic-control-ak3.sh "$ZIP_PATH" 'OP13r-6.1.141'
           {
             echo '### Control artifact passed'
             echo

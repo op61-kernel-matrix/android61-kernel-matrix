@@ -3292,8 +3292,11 @@ runs:
         
         mv "$ZIP_NAME" "$ARTIFACTS_FOLDER/"
 
-        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
+        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ]; then
           bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-nethunter-ak3.sh" \
+            "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
+        elif [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
+          bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-control-ak3.sh" \
             "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
         fi
         
