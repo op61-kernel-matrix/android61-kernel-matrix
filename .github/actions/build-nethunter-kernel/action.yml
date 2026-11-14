@@ -2783,8 +2783,11 @@ runs:
           # their chip cores only. Do not compile unrelated PCI/SDIO buses.
           sed -i -E '/obj-m[[:space:]]*\+=[[:space:]]*rtw_(8723b|8723bs|8723cs|8723de|8723ds|8812ae|8814ae|8821ae|8821ce|8821cs|8822be|8822bs|8822ce|8822cs|pci|sdio)\.o/d' \
             "$RTW88_SOURCE/Makefile"
-          printf '\n# NOSTALGIC NetHunter RTW88 USB pilot\nobj-m += rtw88-nethunter/\n' \
-            >> "$COMMON_KERNEL_FOLDER/drivers/net/wireless/realtek/Makefile"
+          # The OP13R GKI config leaves WLAN_VENDOR_REALTEK disabled, so its
+          # vendor Makefile is not traversed. Attach directly to the wireless
+          # Makefile while retaining the source under realtek/.
+          printf '\n# NOSTALGIC NetHunter RTW88 USB pilot\nobj-m += realtek/rtw88-nethunter/\n' \
+            >> "$COMMON_KERNEL_FOLDER/drivers/net/wireless/Makefile"
           RTW88_MODULE_OUTPUT="$OUT/drivers/net/wireless/realtek/rtw88-nethunter"
           echo "RTW88_SOURCE=$(realpath "$RTW88_SOURCE")" >> "$GITHUB_ENV"
           echo "RTW88_MODULE_OUTPUT=$(realpath -m "$RTW88_MODULE_OUTPUT")" >> "$GITHUB_ENV"
