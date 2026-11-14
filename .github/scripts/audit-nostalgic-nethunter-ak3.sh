@@ -59,6 +59,10 @@ while IFS= read -r enabled; do
     RTW88) expected='rtw_core' ;;
     RTW88_USB) expected='rtw_usb' ;;
     USB_SERIAL) expected='usbserial' ;;
+    USB_SERIAL_CH341) expected='ch341' ;;
+    USB_SERIAL_CP210X) expected='cp210x' ;;
+    USB_SERIAL_FTDI_SIO) expected='ftdi_sio' ;;
+    USB_SERIAL_PL2303) expected='pl2303' ;;
     *) expected=$(tr '[:upper:]-' '[:lower:]_' <<<"$symbol") ;;
   esac
   if ! tr '[:upper:]-' '[:lower:]_' < "$audit_dir/nethunter-modules.txt" | grep -qxF "$expected"; then
