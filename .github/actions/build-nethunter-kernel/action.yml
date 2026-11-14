@@ -2416,7 +2416,9 @@ runs:
         # retain their expected vermagic/KMI contract. NostalgiKSU identity is
         # reported through its own ABI, never by mutating kernel.release.
         if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
-          if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
+          if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+            CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-NETHUNTER-RTW88"
+          elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
             CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-NETHUNTER-NFTBASE"
           elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
             CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-NETHUNTER-NFTCORE"
@@ -2595,7 +2597,13 @@ runs:
           cp "$OUT/.config" "$OUT/nethunter-baseline.config"
           # V2 is deliberately additive and boot-safe. It does not force USB
           # gadget/configfs, DWC3 role changes, Bluetooth, SDR/DVB or CAN.
-          if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
+          if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+            NETHUNTER_BUILTIN_SYMBOLS=(NET INET USB_SUPPORT USB USB_XHCI_HCD USB_XHCI_PLATFORM USB_MON)
+            NETHUNTER_MODULE_SYMBOLS=()
+            scripts/config --file "$OUT/.config" \
+              -d NF_TABLES -d NF_TABLES_INET -d NF_TABLES_IPV4 -d NF_TABLES_IPV6 \
+              -d NFT_CT -d NFT_LOG -d NFT_LIMIT -d NFT_NAT -d NFT_REJECT -d NFT_MASQ
+          elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
             NETHUNTER_BUILTIN_SYMBOLS=(NET INET PACKET PACKET_DIAG UNIX UNIX_DIAG NETFILTER NF_TABLES)
             NETHUNTER_MODULE_SYMBOLS=()
           elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
@@ -2686,7 +2694,9 @@ runs:
               printf '%s\n' "$config_symbol" >> "$OUT/nethunter-unresolved-symbols.txt"
             fi
           done < "$OUT/nethunter-requested-symbols.txt"
-          if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
+          if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+            required_symbols=(CONFIG_USB=y CONFIG_USB_MON=y)
+          elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
             required_symbols=(CONFIG_PACKET_DIAG=y CONFIG_UNIX_DIAG=y CONFIG_NF_TABLES=y)
           elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
             required_symbols=(CONFIG_PACKET_DIAG=y CONFIG_UNIX_DIAG=y CONFIG_NF_TABLES=y)
@@ -2706,6 +2716,15 @@ runs:
               exit 1
             }
           done
+          if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+            for forbidden in NF_TABLES NF_TABLES_INET NF_TABLES_IPV4 NF_TABLES_IPV6 \
+              NFT_CT NFT_LOG NFT_LIMIT NFT_NAT NFT_REJECT NFT_MASQ; do
+              grep -qxF "# CONFIG_${forbidden} is not set" "$OUT/.config" || {
+                echo "::error::Forbidden nftables symbol enabled in RTW88 pilot: CONFIG_${forbidden}"
+                exit 1
+              }
+            done
+          fi
           if [[ "${{ inputs.nethunter_profile_stage }}" != network* ]]; then
             grep -qE '^CONFIG_USB_(XHCI|EHCI|OHCI)_HCD=(y|m)$' "$OUT/.config" || {
             echo "::error::NetHunter USB host requirement missing after olddefconfig: no enabled host controller"
@@ -2768,6 +2787,15 @@ runs:
           MODULE_INSTALL_PATH="$(pwd -P)/out/install"
           rm -rf "$MODULE_INSTALL_PATH"
           make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" INSTALL_MOD_PATH="$MODULE_INSTALL_PATH" modules_install 2>&1 | tee install.log
+          if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+            RTW88_SOURCE="$COMMON_KERNEL_FOLDER/rtw88-nethunter"
+            git clone --filter=blob:none https://github.com/lwfinger/rtw88 "$RTW88_SOURCE"
+            git -C "$RTW88_SOURCE" checkout f1dd7c3a5b87478ab23c3dbb1f8f0d6b82f3f71c
+            make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" \
+              -j"$(nproc --all)" O="$OUT" M="$RTW88_SOURCE" \
+              KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" modules 2>&1 | tee rtw88-build.log
+            echo "RTW88_SOURCE=$(realpath "$RTW88_SOURCE")" >> "$GITHUB_ENV"
+          fi
         else
           make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image 2>&1 | tee build.log
         fi
@@ -2929,6 +2957,7 @@ runs:
             [ "${{ inputs.nethunter_profile_stage }}" != "network-diag" ] || EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER-DIAG'
             [ "${{ inputs.nethunter_profile_stage }}" != "network-nft-core" ] || EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER-NFTCORE'
             [ "${{ inputs.nethunter_profile_stage }}" != "network-nft-base" ] || EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER-NFTBASE'
+            [ "${{ inputs.nethunter_profile_stage }}" != "wireless-all" ] || EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER-RTW88'
             grep -Fq "Linux version ${OP_KERNEL_VERSION}." <<<"$KERNEL_UNAME" &&
               grep -Fq -- "-${OP_ANDROID_VERSION}${EXPECTED_NH_SUFFIX}" <<<"$KERNEL_UNAME" || {
               echo "::error::Unexpected NOSTALGIC-NETHUNTER kernel uname: $KERNEL_UNAME"
@@ -3237,7 +3266,9 @@ runs:
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-added-symbols.txt" .
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unresolved-symbols.txt" .
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unsupported-symbols.txt" .
-          if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
+          if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+            cp "$GITHUB_WORKSPACE/nethunter/nethunter-rtw88-profile-v1.json" .
+          elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
             cp "$GITHUB_WORKSPACE/nethunter/nethunter-nft-base-profile-v1.json" .
           elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
             cp "$GITHUB_WORKSPACE/nethunter/nethunter-nft-core-profile-v1.json" .
@@ -3249,7 +3280,7 @@ runs:
             cp "$GITHUB_WORKSPACE/nethunter/nethunter-profile-v2.json" .
           fi
 
-          if [[ "${{ inputs.nethunter_profile_stage }}" != network* ]]; then
+          if [[ "${{ inputs.nethunter_profile_stage }}" != network* && "${{ inputs.nethunter_profile_stage }}" != "wireless-all" ]]; then
           MODULE_INSTALL_ROOT="$NETHUNTER_MODULE_INSTALL_ROOT"
           MODULE_RELEASE_DIR=$(find "$MODULE_INSTALL_ROOT" -mindepth 1 -maxdepth 1 -type d -print -quit)
           if [ -z "${MODULE_RELEASE_DIR:-}" ] || [ ! -d "$MODULE_RELEASE_DIR" ]; then
@@ -3351,7 +3382,9 @@ runs:
           test -n "${SUSVER:-}"
           PROFILE_SUFFIX=''
           if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
-            if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
+            if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+              PROFILE_SUFFIX='_NOSTALGIC-NETHUNTER-RTW88'
+            elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
               PROFILE_SUFFIX='_NOSTALGIC-NETHUNTER-NFTBASE'
             elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
               PROFILE_SUFFIX='_NOSTALGIC-NETHUNTER-NFTCORE'
@@ -3383,7 +3416,66 @@ runs:
         
         mv "$ZIP_NAME" "$ARTIFACTS_FOLDER/"
 
-        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
+        if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+          WIRELESS_NAME="WirelessKSU_${ZIP_MODEL}_${OP_OS_VERSION}_${KERNEL_FULL_VER}_RTW88-ALL.zip"
+          WIRELESS_PATH=$(realpath -m "$ARTIFACTS_FOLDER/$WIRELESS_NAME")
+          WIRELESS_DIR=$(mktemp -d)
+          mkdir -p "$WIRELESS_DIR/lkm" "$WIRELESS_DIR/system/etc/firmware/rtw88"
+          for dependency in rfkill cfg80211 mac80211; do
+            module=$(find "$NETHUNTER_MODULE_INSTALL_ROOT" -type f -name "${dependency}.ko" -print -quit)
+            [ -n "$module" ] || { echo "::error::Missing wireless dependency module: $dependency"; exit 1; }
+            cp "$module" "$WIRELESS_DIR/lkm/"
+          done
+          find "$RTW88_SOURCE" -maxdepth 1 -type f -name '*.ko' -exec cp {} "$WIRELESS_DIR/lkm/" \;
+          cp -a "$RTW88_SOURCE/firmware/." "$WIRELESS_DIR/system/etc/firmware/rtw88/"
+          cat > "$WIRELESS_DIR/module.prop" <<EOF
+        id=nostalgic_wireless_rtw88_op13r
+        name=NOSTALGIC Wireless RTW88 All (OP13R 6.1.141)
+        version=${KERNEL_FULL_VER}-rtw88-f1dd7c3
+        versionCode=61141
+        author=NOSTALGIC Kernel Lab
+        description=Matched Realtek rtw88 USB modules for the NOSTALGIC OP13R 6.1.141 kernel
+        EOF
+          cat > "$WIRELESS_DIR/post-fs-data.sh" <<'EOF'
+        #!/system/bin/sh
+        MODPATH=${0%/*}
+        load() { ksud insmod "$MODPATH/lkm/$1.ko" 2>/dev/null || true; }
+        load rfkill
+        load cfg80211
+        load mac80211
+        load rtw_core
+        load rtw_usb
+        load rtw_88xxa
+        load rtw_8723x
+        load rtw_8723d
+        load rtw_8812a
+        load rtw_8814a
+        load rtw_8821a
+        load rtw_8821c
+        load rtw_8822b
+        load rtw_8822c
+        load rtw_8723du
+        load rtw_8812au
+        load rtw_8814au
+        load rtw_8821au
+        load rtw_8821cu
+        load rtw_8822bu
+        load rtw_8822cu
+        EOF
+          chmod 0755 "$WIRELESS_DIR/post-fs-data.sh"
+          find "$WIRELESS_DIR/lkm" -type f -name '*.ko' -print0 | while IFS= read -r -d '' module; do
+            modinfo -F vermagic "$module" | grep -Fq "$OP_KERNEL_VERSION" || {
+              echo "::error::Wireless module vermagic does not match $OP_KERNEL_VERSION: $module"; exit 1;
+            }
+          done
+          (cd "$WIRELESS_DIR" && zip -r9 "$WIRELESS_PATH" .)
+          echo "WIRELESS_NAME=$WIRELESS_NAME" >> "$GITHUB_ENV"
+        fi
+
+        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+          bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-nethunter-rtw88-ak3.sh" \
+            "$ARTIFACTS_FOLDER/$ZIP_NAME" "$ARTIFACTS_FOLDER/$WIRELESS_NAME" "$OP_MODEL"
+        elif [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
           bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-nethunter-nft-base-ak3.sh" \
             "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
         elif [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
@@ -3403,7 +3495,11 @@ runs:
             "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
         fi
         
-        find "$ARTIFACTS_FOLDER" -maxdepth 1 -type f ! -name "$ZIP_NAME" -delete
+        if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
+          find "$ARTIFACTS_FOLDER" -maxdepth 1 -type f ! -name "$ZIP_NAME" ! -name "$WIRELESS_NAME" -delete
+        else
+          find "$ARTIFACTS_FOLDER" -maxdepth 1 -type f ! -name "$ZIP_NAME" -delete
+        fi
         
         ZIP_SIZE=$(stat -c%s "$ARTIFACTS_FOLDER/$ZIP_NAME")
         ZIP_SHA256=$(sha256sum "$ARTIFACTS_FOLDER/$ZIP_NAME" | awk '{print $1}')
@@ -3562,7 +3658,7 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.ZIP_NAME }}
-        path: ${{ env.ARTIFACTS_FOLDER }}/${{ env.ZIP_NAME }}
+        path: ${{ env.ARTIFACTS_FOLDER }}/*.zip
         compression-level: 0
         retention-days: 90
 

@@ -1,0 +1,12 @@
+{
+  "profile": "NOSTALGIC-NETHUNTER-RTW88",
+  "version": 1,
+  "reference": "proven OP13R 6.1.176 WirelessKSU architecture",
+  "rtw88_source": "https://github.com/lwfinger/rtw88",
+  "rtw88_commit": "f1dd7c3a5b87478ab23c3dbb1f8f0d6b82f3f71c",
+  "policy": {
+    "nf_tables": false,
+    "separate_wireless_package": true,
+    "load_at_post_fs_data": true
+  }
+}
