@@ -1,0 +1,7 @@
+{
+  "profile": "NOSTALGIC-NETHUNTER-NFTBASE",
+  "version": 1,
+  "safe_from_previous_pilot": ["CONFIG_PACKET_DIAG=y", "CONFIG_UNIX_DIAG=y"],
+  "new_for_this_pilot": ["CONFIG_NF_TABLES=y"],
+  "deferred": ["nftables-family-selectors", "nft-helpers", "bridge-netfilter", "macvlan", "ipvlan"]
+}
