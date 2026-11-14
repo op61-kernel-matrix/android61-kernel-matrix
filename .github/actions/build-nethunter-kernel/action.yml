@@ -2603,6 +2603,9 @@ runs:
             scripts/config --file "$OUT/.config" \
               -d NF_TABLES -d NF_TABLES_INET -d NF_TABLES_IPV4 -d NF_TABLES_IPV6 \
               -d NFT_CT -d NFT_LOG -d NFT_LIMIT -d NFT_NAT -d NFT_REJECT -d NFT_MASQ
+            # The external USB stack consumes mac80211/cfg80211 exports that
+            # Android GKI otherwise removes when no in-tree consumer uses them.
+            scripts/config --file "$OUT/.config" -d TRIM_UNUSED_KSYMS
           elif [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-base" ]; then
             NETHUNTER_BUILTIN_SYMBOLS=(NET INET PACKET PACKET_DIAG UNIX UNIX_DIAG NETFILTER NF_TABLES)
             NETHUNTER_MODULE_SYMBOLS=()
@@ -2719,6 +2722,10 @@ runs:
           if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
             grep -qxF '# CONFIG_NF_TABLES is not set' "$OUT/.config" || {
               echo '::error::Forbidden nftables parent enabled in RTW88 pilot: CONFIG_NF_TABLES'
+              exit 1
+            }
+            grep -qxF '# CONFIG_TRIM_UNUSED_KSYMS is not set' "$OUT/.config" || {
+              echo '::error::RTW88 pilot requires untrimmed mac80211/cfg80211 exports'
               exit 1
             }
           fi
