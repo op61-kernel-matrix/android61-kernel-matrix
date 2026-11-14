@@ -2717,13 +2717,10 @@ runs:
             }
           done
           if [ "${{ inputs.nethunter_profile_stage }}" = "wireless-all" ]; then
-            for forbidden in NF_TABLES NF_TABLES_INET NF_TABLES_IPV4 NF_TABLES_IPV6 \
-              NFT_CT NFT_LOG NFT_LIMIT NFT_NAT NFT_REJECT NFT_MASQ; do
-              grep -qxF "# CONFIG_${forbidden} is not set" "$OUT/.config" || {
-                echo "::error::Forbidden nftables symbol enabled in RTW88 pilot: CONFIG_${forbidden}"
-                exit 1
-              }
-            done
+            grep -qxF '# CONFIG_NF_TABLES is not set' "$OUT/.config" || {
+              echo '::error::Forbidden nftables parent enabled in RTW88 pilot: CONFIG_NF_TABLES'
+              exit 1
+            }
           fi
           if [[ "${{ inputs.nethunter_profile_stage }}" != network* ]]; then
             grep -qE '^CONFIG_USB_(XHCI|EHCI|OHCI)_HCD=(y|m)$' "$OUT/.config" || {
