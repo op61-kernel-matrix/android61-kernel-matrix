@@ -1,0 +1,7 @@
+{
+  "profile": "NOSTALGIC-NETHUNTER-NFTCORE",
+  "version": 1,
+  "safe_from_previous_pilot": ["CONFIG_PACKET_DIAG=y", "CONFIG_UNIX_DIAG=y"],
+  "new_for_this_pilot": ["CONFIG_NF_TABLES=y", "CONFIG_NF_TABLES_INET=y", "CONFIG_NF_TABLES_IPV4=y", "CONFIG_NF_TABLES_IPV6=y"],
+  "deferred": ["nft-helpers", "bridge-netfilter", "macvlan", "ipvlan", "usb", "hid", "adapter-modules"]
+}

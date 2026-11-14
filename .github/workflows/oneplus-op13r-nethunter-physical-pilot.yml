@@ -25,12 +25,12 @@ env:
   PILOT_CONFIG: configs/a16/OP13r-6.1.141.json
   SUSFS_PIN_MANIFEST: configs/susfs-2.4.0-pins.json
   REQUIRED_SUSFS_VERSION: "2.4.0"
-  PILOT_STAGE: nethunter-network-diagnostics
+  PILOT_STAGE: nethunter-nftables-core
   STABLE_WORKFLOW_SHA256: "04d39cbebfe1b22bbc8d3355af7726f466656211e29c2ff9aca6c944e4ff8b2c"
 
 jobs:
   control:
-    name: PILOT 1A · OP13R · packet and Unix diagnostics
+    name: PILOT 1B · OP13R · nftables core
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -60,12 +60,13 @@ jobs:
           [[ "$pin" =~ ^[0-9a-f]{40}$ ]]
           echo "susfs_ref=$pin" >> "$GITHUB_OUTPUT"
           {
-            echo '## Physical pilot 1A: packet and Unix diagnostics only'
+            echo '## Physical pilot 1B: nftables core'
             echo
             echo '- Target: `OP13r-6.1.141`'
             echo '- Base: proven NostalgiKSU 33198-6 + SuSFS 2.4.0'
-            echo '- Added scope: `CONFIG_PACKET_DIAG=y` and `CONFIG_UNIX_DIAG=y` only'
-            echo '- Excluded: nftables, bridge-netfilter, macvlan/IPVLAN, USB/HID, adapters and all other prior pilot deltas'
+            echo '- Preserved safe scope: packet and Unix diagnostics'
+            echo '- New scope: four `NF_TABLES` framework symbols only'
+            echo '- Excluded: NFT helpers, bridge-netfilter, macvlan/IPVLAN, USB/HID and adapters'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install build dependencies
@@ -108,7 +109,7 @@ jobs:
           susfs_commit_hash_or_branch: ${{ steps.control.outputs.susfs_ref }}
           optimize_level: O2
           nethunter_profile: true
-          nethunter_profile_stage: network-diag
+          nethunter_profile_stage: network-nft-core
           clean: false
           debug: ${{ inputs.debug }}
 
@@ -120,10 +121,10 @@ jobs:
           set -euo pipefail
           ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$ZIP_PATH"
-          [[ "$ZIP_NAME" == *NOSTALGIC-NETHUNTER-DIAG.zip ]]
-          bash .github/scripts/audit-nostalgic-nethunter-diag-ak3.sh "$ZIP_PATH" 'OP13r-6.1.141'
+          [[ "$ZIP_NAME" == *NOSTALGIC-NETHUNTER-NFTCORE.zip ]]
+          bash .github/scripts/audit-nostalgic-nethunter-nft-core-ak3.sh "$ZIP_PATH" 'OP13r-6.1.141'
           {
-            echo '### Diagnostic-only pilot artifact passed'
+            echo '### Nftables-core pilot artifact passed'
             echo
             echo "- Artifact: \`$ZIP_NAME\`"
             echo '- Required next result: physical boot confirmation before enabling any further NetHunter group'

@@ -2416,7 +2416,9 @@ runs:
         # retain their expected vermagic/KMI contract. NostalgiKSU identity is
         # reported through its own ABI, never by mutating kernel.release.
         if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
-          if [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
+          if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
+            CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-NETHUNTER-NFTCORE"
+          elif [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
             CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-NETHUNTER-DIAG"
           elif [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
             CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-NETHUNTER-NETWORK"
@@ -2591,7 +2593,13 @@ runs:
           cp "$OUT/.config" "$OUT/nethunter-baseline.config"
           # V2 is deliberately additive and boot-safe. It does not force USB
           # gadget/configfs, DWC3 role changes, Bluetooth, SDR/DVB or CAN.
-          if [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
+          if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
+            NETHUNTER_BUILTIN_SYMBOLS=(
+              NET INET PACKET PACKET_DIAG UNIX UNIX_DIAG NETFILTER
+              NF_TABLES NF_TABLES_INET NF_TABLES_IPV4 NF_TABLES_IPV6
+            )
+            NETHUNTER_MODULE_SYMBOLS=()
+          elif [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
             NETHUNTER_BUILTIN_SYMBOLS=(NET INET PACKET PACKET_DIAG UNIX UNIX_DIAG)
             NETHUNTER_MODULE_SYMBOLS=()
           elif [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
@@ -2673,7 +2681,9 @@ runs:
               printf '%s\n' "$config_symbol" >> "$OUT/nethunter-unresolved-symbols.txt"
             fi
           done < "$OUT/nethunter-requested-symbols.txt"
-          if [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
+          if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
+            required_symbols=(CONFIG_PACKET_DIAG=y CONFIG_UNIX_DIAG=y CONFIG_NF_TABLES=y)
+          elif [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
             required_symbols=(CONFIG_PACKET=y CONFIG_PACKET_DIAG=y CONFIG_UNIX_DIAG=y)
           elif [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
             required_symbols=(CONFIG_TUN=y CONFIG_PACKET=y CONFIG_NETFILTER=y CONFIG_NET_NS=y)
@@ -2910,6 +2920,7 @@ runs:
             EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER'
             [ "${{ inputs.nethunter_profile_stage }}" != "network" ] || EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER-NETWORK'
             [ "${{ inputs.nethunter_profile_stage }}" != "network-diag" ] || EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER-DIAG'
+            [ "${{ inputs.nethunter_profile_stage }}" != "network-nft-core" ] || EXPECTED_NH_SUFFIX='-NOSTALGIC-NETHUNTER-NFTCORE'
             grep -Fq "Linux version ${OP_KERNEL_VERSION}." <<<"$KERNEL_UNAME" &&
               grep -Fq -- "-${OP_ANDROID_VERSION}${EXPECTED_NH_SUFFIX}" <<<"$KERNEL_UNAME" || {
               echo "::error::Unexpected NOSTALGIC-NETHUNTER kernel uname: $KERNEL_UNAME"
@@ -3218,7 +3229,9 @@ runs:
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-added-symbols.txt" .
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unresolved-symbols.txt" .
           cp "$COMMON_KERNEL_FOLDER/out/nethunter-unsupported-symbols.txt" .
-          if [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
+          if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
+            cp "$GITHUB_WORKSPACE/nethunter/nethunter-nft-core-profile-v1.json" .
+          elif [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
             cp "$GITHUB_WORKSPACE/nethunter/nethunter-network-diag-profile-v1.json" .
           elif [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
             cp "$GITHUB_WORKSPACE/nethunter/nethunter-network-profile-v1.json" .
@@ -3328,7 +3341,9 @@ runs:
           test -n "${SUSVER:-}"
           PROFILE_SUFFIX=''
           if [ "${{ inputs.nethunter_profile }}" = "true" ]; then
-            if [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
+            if [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
+              PROFILE_SUFFIX='_NOSTALGIC-NETHUNTER-NFTCORE'
+            elif [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
               PROFILE_SUFFIX='_NOSTALGIC-NETHUNTER-DIAG'
             elif [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
               PROFILE_SUFFIX='_NOSTALGIC-NETHUNTER-NETWORK'
@@ -3356,7 +3371,10 @@ runs:
         
         mv "$ZIP_NAME" "$ARTIFACTS_FOLDER/"
 
-        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
+        if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" = "network-nft-core" ]; then
+          bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-nethunter-nft-core-ak3.sh" \
+            "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
+        elif [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" = "network-diag" ]; then
           bash "$GITHUB_WORKSPACE/.github/scripts/audit-nostalgic-nethunter-diag-ak3.sh" \
             "$ARTIFACTS_FOLDER/$ZIP_NAME" "$OP_MODEL"
         elif [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ] && [ "${{ inputs.nethunter_profile }}" = "true" ] && [ "${{ inputs.nethunter_profile_stage }}" = "network" ]; then
