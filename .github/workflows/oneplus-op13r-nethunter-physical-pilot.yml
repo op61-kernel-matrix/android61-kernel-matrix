@@ -1,0 +1,129 @@
+name: NostalgiKSU OP13R NetHunter physical pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge_physical_test:
+        description: I understand this produces one experimental OP13R boot image for physical testing
+        required: true
+        type: boolean
+        default: false
+      debug:
+        description: Upload diagnostic build artifacts
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nostalgiksu-op13r-nethunter-physical-pilot-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PILOT_CONFIG: configs/a16/OP13r-6.1.141.json
+  SUSFS_PIN_MANIFEST: configs/susfs-2.4.0-pins.json
+  REQUIRED_SUSFS_VERSION: "2.4.0"
+  PILOT_STAGE: control-no-nethunter-deltas
+  STABLE_WORKFLOW_SHA256: "04d39cbebfe1b22bbc8d3355af7726f466656211e29c2ff9aca6c944e4ff8b2c"
+
+jobs:
+  control:
+    name: CONTROL · OP13R 6.1.141 · no NetHunter deltas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout matrix controller
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Prove isolated stable control
+        id: control
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ inputs.acknowledge_physical_test }}" = true ] || {
+            echo '::error::Physical-test acknowledgement is required'
+            exit 1
+          }
+          baseline='stable-reference/33197-6/oneplus-full-169-matrix.yml'
+          echo "$STABLE_WORKFLOW_SHA256  $baseline" | sha256sum --check --strict
+          cmp -s "$baseline" '.github/workflows/oneplus-full-169-matrix.yml'
+          test -s "$PILOT_CONFIG"
+          jq -e '.model == "OP13r-6.1.141" and
+                 .manifest == "oneplus_13r_6.1.141_w.xml" and
+                 .android_version == "android14" and .kernel_version == "6.1"' \
+            "$PILOT_CONFIG" >/dev/null
+          pin=$(jq -er '.families["android14-6.1"]' "$SUSFS_PIN_MANIFEST")
+          [[ "$pin" =~ ^[0-9a-f]{40}$ ]]
+          echo "susfs_ref=$pin" >> "$GITHUB_OUTPUT"
+          {
+            echo '## Physical pilot: control'
+            echo
+            echo '- Target: `OP13r-6.1.141`'
+            echo '- Build action: proven stable `build-kernel` action'
+            echo '- NetHunter profile: disabled'
+            echo '- NetHunter symbols/modules: none added'
+            echo '- Purpose: prove the current stable pipeline still produces a physically bootable control'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout 10m sudo apt-get -o Acquire::Retries=3 update -qq && \
+              timeout 10m sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                git curl ca-certificates build-essential clang lld flex bison \
+                libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+                libxml2-utils rsync unzip dwarves file python3 ccache jq bc \
+                dos2unix kmod libdw-dev elfutils pigz; then
+              break
+            fi
+            [ "$attempt" -lt 2 ] || exit 1
+          done
+          sudo apt-get clean
+
+      - name: Load exact stable OP13R control
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          JSON=$(jq -c --arg version "$REQUIRED_SUSFS_VERSION" \
+            --arg family 'android14-6.1' \
+            --arg commit '${{ steps.control.outputs.susfs_ref }}' \
+            '.susfs=true | .susfs_version=$version | .susfs_family=$family | .susfs_commit=$commit' \
+            "$PILOT_CONFIG")
+          jq -e '.nethunter_profile != true' <<<"$JSON" >/dev/null
+          echo "json=$JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Build stable control image
+        id: build
+        uses: ./.github/actions/build-kernel
+        with:
+          op_config_json: ${{ steps.config.outputs.json }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          ksu_type: NostalgiKSU
+          susfs_commit_hash_or_branch: ${{ steps.control.outputs.susfs_ref }}
+          optimize_level: O2
+          clean: false
+          debug: ${{ inputs.debug }}
+
+      - name: Enforce control artifact identity
+        shell: bash
+        env:
+          ZIP_NAME: ${{ steps.build.outputs.zip_name }}
+        run: |
+          set -euo pipefail
+          ZIP_PATH=$(find . -type f -name "$ZIP_NAME" -print -quit)
+          test -n "$ZIP_PATH"
+          [[ "$ZIP_NAME" != *NOSTALGIC-NETHUNTER* ]]
+          bash .github/scripts/audit-nostalgic-ak3.sh "$ZIP_PATH" 'OP13r-6.1.141'
+          {
+            echo '### Control artifact passed'
+            echo
+            echo "- Artifact: \`$ZIP_NAME\`"
+            echo '- Required next result: physical boot confirmation before enabling any NetHunter group'
+          } >> "$GITHUB_STEP_SUMMARY"
