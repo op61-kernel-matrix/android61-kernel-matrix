@@ -1056,6 +1056,7 @@ runs:
         }
         echo "KSU_COMMIT_SHA=$FINASU_REF" >> "$GITHUB_ENV"
         echo "KSUVER=${KSU_VERSION}-pr82" >> "$GITHUB_ENV"
+        echo "KSU_FOLDER=$KERNEL_PLATFORM_FOLDER/FinaSU/kernel" >> "$GITHUB_ENV"
         echo "KSU_BUILD_ARGS=KSU_REQUIRE_PREINIT=1" >> "$GITHUB_ENV"
         echo "NEED_HOOKS=false" >> "$GITHUB_ENV"
         echo "FinaSU" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
