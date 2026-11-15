@@ -2245,10 +2245,9 @@ runs:
         CONFIG_PHY_MTK_TPHY=y
         EOF
         elif [[ "${OP_BRANCH,,}${OP_SOC,,}" == *"sm"* ]]; then
-            echo "Detected Qualcomm (sm). Adding QCOM USB PHY configs..."
+            echo "Detected Qualcomm (sm). Keeping the device-tree-selected PHY configuration..."
             cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<EOF
         CONFIG_USB_DWC3_QCOM=y
-        CONFIG_PHY_QCOM_QMP=y
         CONFIG_PHY_QCOM_USB_HS=y
         EOF
         else

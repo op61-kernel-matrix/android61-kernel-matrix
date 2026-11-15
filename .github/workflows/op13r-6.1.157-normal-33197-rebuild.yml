@@ -77,3 +77,11 @@ jobs:
           zip_path=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$zip_path"
           bash .github/scripts/audit-nostalgic-ak3.sh "$zip_path" 'OP13r-6.1.157'
+
+      - name: Upload flashable normal ZIP
+        uses: actions/upload-artifact@v6
+        with:
+          name: OP13R-6.1.157-NostalgiKSU-33197-Normal
+          path: '**/${{ steps.build.outputs.zip_name }}'
+          if-no-files-found: error
+          compression-level: 0
