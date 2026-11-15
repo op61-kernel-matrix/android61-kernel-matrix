@@ -1,4 +1,4 @@
-name: Validate OP13R 6.1.157 NostalgiKSU
+name: Rebuild OP13R 6.1.157 NostalgiKSU Gaming
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   validate:
-    name: OP13R 6.1.157 · NostalgiKSU 33197 · SuSFS 2.4.0
+    name: OP13R 6.1.157 · NostalgiKSU Gaming 33198 · SuSFS 2.4.0
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -43,7 +43,7 @@ jobs:
                  .manifest == "oneplus_13r_6.1.157_w.xml"' "$config" >/dev/null
           grep -qF 'revision="7a7ae28e849b0f9b42b8b6fc26feebe1864bf7ac"' \
             manifests/a16/oneplus_13r_6.1.157_w.xml
-          grep -qF 'revision="28b975ada54f8610ed531a6b57253aed10e7c87d"' \
+          grep -qF 'revision="dda73f7205501c09f7d0f48fd5f6d7f4b2220ca7"' \
             manifests/a16/oneplus_13r_6.1.157_w.xml
           json=$(jq -c --arg pin "$pin" \
             '.susfs=true | .susfs_version="2.4.0" |
@@ -53,13 +53,14 @@ jobs:
 
       - name: Build and enforce all capabilities
         id: build
-        uses: ./.github/actions/build-kernel
+        uses: ./.github/actions/build-gaming-kernel
         with:
           op_config_json: ${{ steps.config.outputs.json }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           ksu_type: NostalgiKSU
           susfs_commit_hash_or_branch: ${{ steps.config.outputs.pin }}
           optimize_level: O2
+          gaming_profile: true
           clean: true
           debug: true
 
@@ -73,8 +74,8 @@ jobs:
         run: |
           set -euo pipefail
           [ "$KERNEL_VERSION" = "android14-6.1.157" ]
-          [ "$KSU_VERSION" = "33197-6" ]
+          [ "$KSU_VERSION" = "33198-6" ]
           [ "$SUSFS_VERSION" = "v2.4.0" ]
           zip_path=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$zip_path"
-          bash .github/scripts/audit-nostalgic-ak3.sh "$zip_path" 'OP13r-6.1.157'
+          bash .github/scripts/audit-nostalgic-gaming-ak3.sh "$zip_path" 'OP13r-6.1.157'
