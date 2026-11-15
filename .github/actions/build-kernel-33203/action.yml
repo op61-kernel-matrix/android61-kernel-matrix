@@ -1017,64 +1017,12 @@ runs:
         echo "✅ BakaSU added (commit: ${KSU_COMMIT_SHA:0:8})"
         echo "::endgroup::"
 
-    - name: Add pinned FinaSU SELinux-hide build
-      shell: bash
-      if: ${{ inputs.ksu_type == 'FinaSU' }}
-      run: |
-        set -euo pipefail
-        echo "::group::Add pinned FinaSU SELinux-hide build"
-        cd "$KERNEL_PLATFORM_FOLDER"
-        FINASU_REF="${{ inputs.ksu_branch_or_hash }}"
-        [ -n "$FINASU_REF" ] || FINASU_REF=1765b3768c25d53cc02c9d8663f003c40571c993
-        [ "$FINASU_REF" = 1765b3768c25d53cc02c9d8663f003c40571c993 ] || {
-          echo "::error::FinaSU must use the reviewed PR #82 head"
-          exit 1
-        }
-        rm -rf FinaSU
-        git init -q FinaSU
-        git -C FinaSU remote add origin https://github.com/LyraVoid/FinaSU.git
-        git -C FinaSU fetch --no-tags origin refs/pull/82/head
-        git -C FinaSU checkout --detach FETCH_HEAD
-        [ "$(git -C FinaSU rev-parse HEAD)" = "$FINASU_REF" ]
-        grep -qF 'KSU_LSM_HOOK_INIT(inode_setxattr' FinaSU/kernel/feature/selinux_hide.c
-        patch -d FinaSU -p1 --forward < "$GITHUB_ACTION_PATH/patches/finasu-pr82-complete-inode-setxattr.patch"
-        grep -qF 'ksu_selinux_superblock_init' FinaSU/kernel/selinux/inode.c
-        grep -qF 'bool ksu_selinux_hide_running __read_mostly' FinaSU/kernel/feature/selinux_hide.c
-        grep -qF 'DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)' FinaSU/kernel/feature/selinux_hide.c
-        ! grep -qF 'static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)' FinaSU/kernel/feature/selinux_hide.c
-        FINASU_DIR="$KERNEL_PLATFORM_FOLDER/FinaSU" sh FinaSU/kernel/setup.sh --dir "$KERNEL_PLATFORM_FOLDER/FinaSU"
-
-        cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<'EOF'
-        CONFIG_KSU=y
-        CONFIG_KPROBES=y
-        CONFIG_KALLSYMS=y
-        CONFIG_KALLSYMS_ALL=y
-        CONFIG_EXT4_FS=y
-        CONFIG_HEADERS_INSTALL=y
-        CONFIG_THREAD_INFO_IN_TASK=y
-        EOF
-
-        KSU_VERSION=$((30000 + $(git -C FinaSU rev-list --count HEAD)))
-        [ "$KSU_VERSION" = 33205 ] || {
-          echo "::error::Unexpected FinaSU source version: $KSU_VERSION"
-          exit 1
-        }
-        echo "KSU_COMMIT_SHA=$FINASU_REF" >> "$GITHUB_ENV"
-        echo "KSUVER=${KSU_VERSION}-pr82" >> "$GITHUB_ENV"
-        echo "KSU_FOLDER=$KERNEL_PLATFORM_FOLDER/FinaSU/kernel" >> "$GITHUB_ENV"
-        echo "KSU_BUILD_ARGS=KSU_REQUIRE_PREINIT=1" >> "$GITHUB_ENV"
-        echo "NEED_HOOKS=false" >> "$GITHUB_ENV"
-        echo "FinaSU" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
-        echo "${KSU_VERSION}-pr82" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
-        echo "FinaSU PR #82 source: $FINASU_REF"
-        echo "::endgroup::"
-
-    - name: Add device-verified NostalgiKSU 33203-6
+    - name: Add verified NostalgiKSU 33203-6
       shell: bash
       if: ${{ inputs.ksu_type == 'NostalgiKSU' }}
       run: |
         set -euo pipefail
-        echo "::group::Add device-verified NostalgiKSU 33203-6"
+        echo "::group::Add verified NostalgiKSU 33203-6"
         cd "$KERNEL_PLATFORM_FOLDER"
         rm -rf KernelSU
         mkdir -p KernelSU
@@ -1091,9 +1039,9 @@ runs:
         test -L KernelSU/kernel/include/uapi
 
         # Pin the exact kernel ABI and stable signing identity validated by the
-        # verified run-67 release. CI must never substitute another
+        # verified run-67 manager. CI must never substitute another
         # KernelSU fork or merely relabel an older NostalgiKSU source.
-        sed -i '1i FINASU_TRUSTED_SIZE := 0x515\nFINASU_TRUSTED_HASH := ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456\nKSU_VERSION_FULL_OVERRIDE := v1.6.2-572354ce@HEAD\nKSU_VERSION_OVERRIDE := 33203' KernelSU/kernel/Kbuild
+        sed -i '1i FINASU_TRUSTED_SIZE := 0x515\nFINASU_TRUSTED_HASH := ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456\nKSU_VERSION_FULL_OVERRIDE := v1.6.2-33203-572354ce@HEAD\nKSU_VERSION_OVERRIDE := 33203' KernelSU/kernel/Kbuild
         KSU_COMMIT_SHA=572354ce6363b653d7f7e8356e3af607d4426fc5
 
         DRIVER_DIR="$COMMON_KERNEL_FOLDER/drivers"
@@ -1198,8 +1146,6 @@ runs:
               echo "Adding the SuSFS priority-UID command to BakaSU dispatch"
               cd "$KSU_FOLDER"
               patch -p1 --forward < "$GITHUB_ACTION_PATH/patches/bakasu-priority-uid-dispatch.patch"
-            elif [ "${{ inputs.ksu_type }}" = "FinaSU" ]; then
-              echo "FinaSU provides its native SuSFS dispatch; the generic KernelSU driver patch is intentionally skipped"
             else
               echo "NostalgiKSU already provides the native SuSFS dispatch for $susfs_version; no foreign dispatch patch applied"
             fi
@@ -1500,7 +1446,7 @@ runs:
         if [ "${{ env.ANDROID_VER }}" = "android12" ] && \
            [ "${{ env.KERNEL_VER }}" = "5.10" ] && \
            [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
-          echo "Completing NostalgiKSU 33203 exec hooks for Android 12 / 5.10..."
+          echo "Completing NostalgiKSU 33197 exec hooks for Android 12 / 5.10..."
           python3 "$GITHUB_WORKSPACE/.github/scripts/complete-nostalgiksu-510-exec-hooks.py" fs/exec.c
         fi
 
@@ -2624,7 +2570,7 @@ runs:
         ccache -s | head -n 20
         echo "============================================"
         
-        make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" O="$OUT" ${KSU_BUILD_ARGS:-} gki_defconfig
+        make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" O="$OUT" gki_defconfig
         
         LOCAL_LOCALVERSION="${CUSTOM_LOCALVERSION:--OP-BAKASU}"
         if [ -n "${LOCAL_LOCALVERSION:-}" ]; then
@@ -2668,7 +2614,7 @@ runs:
             ;;
         esac
         
-        make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" O="$OUT" ${KSU_BUILD_ARGS:-} olddefconfig
+        make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" O="$OUT" olddefconfig
         
         KCFLAGS="$KCFLAGS -Wno-error -pipe ${KCFLAGS_EXTRA}"
         KCPPFLAGS="$KCPPFLAGS -DCONFIG_OPTIMIZE_INLINING"
@@ -2695,7 +2641,7 @@ runs:
 
         if [ ! -d "$CCACHE_DIR" ] || [ -z "$(find "$CCACHE_DIR" -maxdepth 2 -type f -print -quit 2>/dev/null)" ]; then
           echo "🔥 Priming cache with header preprocessing..."
-          make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -C "$COMMON_KERNEL_FOLDER" O="$OUT" ${KSU_BUILD_ARGS:-} headers_install prepare 2>&1 | head -n 20 || true
+          make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -C "$COMMON_KERNEL_FOLDER" O="$OUT" headers_install prepare 2>&1 | head -n 20 || true
           echo ""
         fi
         
@@ -2703,8 +2649,8 @@ runs:
         set -o pipefail
         
         if [ "${{ inputs.debug }}" == "true" ]; then
-          make V=1 LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" ${KSU_BUILD_ARGS:-} KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image modules 2>&1 | tee build.log
-          make V=1 LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$COMMON_KERNEL_FOLDER/out" ${KSU_BUILD_ARGS:-} KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" INSTALL_MOD_PATH="$COMMON_KERNEL_FOLDER/out/install" modules_install 2>&1 | tee install.log
+          make V=1 LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image modules 2>&1 | tee build.log
+          make V=1 LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$COMMON_KERNEL_FOLDER/out" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" INSTALL_MOD_PATH="$COMMON_KERNEL_FOLDER/out/install" modules_install 2>&1 | tee install.log
           
           cp build.log "$DEBUG_ARTIFACTS_FOLDER/build.log"
           cp install.log "$DEBUG_ARTIFACTS_FOLDER/install.log"
@@ -2715,7 +2661,7 @@ runs:
           
           ls -la "$DEBUG_ARTIFACTS_FOLDER"
         else
-          make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" ${KSU_BUILD_ARGS:-} KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image 2>&1 | tee build.log
+          make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image 2>&1 | tee build.log
         fi
         
         BUILD_END=$(date +%s)
@@ -2892,13 +2838,6 @@ runs:
             exit 1
           fi
         fi
-        if [ "${{ inputs.ksu_type }}" = "FinaSU" ]; then
-          grep -qF '33205' "$IMAGE_STRINGS" || { echo "::error::FinaSU 33205 marker missing"; exit 1; }
-          grep -qF 'selinux_hide: init: selinux_inode_setxattr_hook err:' "$IMAGE_STRINGS" || {
-            echo "::error::FinaSU inode_setxattr SELinux-hide hook marker missing"
-            exit 1
-          }
-        fi
 
         # Reject the artifact unless all nine required SuSFS capabilities remain.
         REQUIRED_SUSFS_STRINGS=(
@@ -2952,7 +2891,7 @@ runs:
         fi
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
           grep -qF '33203' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33203 marker missing"; exit 1; }
-          grep -qF 'v1.6.2-572354ce@HEAD' "$IMAGE_STRINGS" || { echo "::error::Verified NostalgiKSU 33203 source marker missing"; exit 1; }
+          grep -qF 'v1.6.2-33203-572354ce@HEAD' "$IMAGE_STRINGS" || { echo "::error::Verified NostalgiKSU 33203 source marker missing"; exit 1; }
           grep -qF 'ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456' "$IMAGE_STRINGS" || { echo "::error::Validated run-65 manager certificate missing"; exit 1; }
           if grep -qiE 'OP-BAKASU|huangdihd|ReSukiSU' "$IMAGE_STRINGS"; then
             echo "::error::Foreign visible kernel branding found in Image"
@@ -3060,7 +2999,6 @@ runs:
         # the source AnyKernel3 tree, while giving the pilot an installer identity
         # that is independent of both the upstream kernel and ReSuSFS projects.
         # This is installer-only branding: it must never alter uname/kernel.release.
-        export SELECTED_KSU_TYPE='${{ inputs.ksu_type }}'
         python3 - <<'PY'
         import os
         from pathlib import Path
@@ -3090,11 +3028,7 @@ runs:
             -1,
         )
         if start >= 0:
-            footer = Path(os.environ["GITHUB_ACTION_PATH"], "nostalgic-anykernel-footer.sh").read_text()
-            if os.environ["SELECTED_KSU_TYPE"] == "FinaSU":
-                footer = footer.replace("NostalgiKSU", "FinaSU")
-                footer = footer.replace("33203-6", "33205-pr82")
-            footer = footer.splitlines()
+            footer = Path(os.environ["GITHUB_ACTION_PATH"], "nostalgic-anykernel-footer.sh").read_text().splitlines()
             lines[start:] = footer
         else:
             raise SystemExit("Known AnyKernel footer marker was not found")
@@ -3172,25 +3106,11 @@ runs:
         # Fatal's proven source is intentionally retained, but none of its
         # WildKernels/Fatal installer footer or presentation may survive in a
         # NOSTALGIC-AK3 deliverable.
-        if [ "${{ inputs.ksu_type }}" = "FinaSU" ]; then
-          grep -Fq 'ui_print "FinaSU"' anykernel.sh
-          grep -Fq 'Core stack: FinaSU 33205-pr82 + NOSTALGIC SuSFS 2.4.0 GKI-2' anykernel.sh
-        else
-          grep -Fq 'ui_print "NostalgiKSU"' anykernel.sh
-        fi
+        grep -Fq 'ui_print "NostalgiKSU"' anykernel.sh
         grep -Fq 'ui_print "NOSTALGIC Kernel Lab"' anykernel.sh
         grep -Fq 'Built with love by NOSTALGIC @Reals3s' anykernel.sh
-        if [ "${{ inputs.ksu_type }}" = "FinaSU" ]; then
-          grep -Fq 'Credits: OnePlus OSS, FinaSU contributors and AnyKernel3.' anykernel.sh
-        else
-          grep -Fq 'Credits: OnePlus OSS, NostalgiKSU contributors and AnyKernel3.' anykernel.sh
-        fi
-        if [ "${{ inputs.ksu_type }}" = "FinaSU" ]; then
-          FORBIDDEN_INSTALLER_BRANDS='huangdihd|wild[[:space:]_-]*kernels?|fatal|bakasu|resusfs|nomount|resuki|nostalgiksu'
-        else
-          FORBIDDEN_INSTALLER_BRANDS='huangdihd|wild[[:space:]_-]*kernels?|fatal|bakasu|resusfs|nomount|resuki|finasu'
-        fi
-        if grep -qiE "$FORBIDDEN_INSTALLER_BRANDS" anykernel.sh; then
+        grep -Fq 'Credits: OnePlus OSS, NostalgiKSU contributors and AnyKernel3.' anykernel.sh
+        if grep -qiE 'huangdihd|wild[[:space:]_-]*kernels?|fatal|bakasu|resusfs|nomount|resuki' anykernel.sh; then
           echo "::error::Foreign installer branding survived the NOSTALGIC-AK3 footer rewrite"
           exit 1
         fi

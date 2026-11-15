@@ -22,7 +22,7 @@ for required in Image anykernel.sh banner; do
   }
 done
 
-expected_banner="$GITHUB_WORKSPACE/.github/actions/build-kernel-33203/assets/nostalgiksu-banner"
+expected_banner="$GITHUB_WORKSPACE/.github/actions/build-kernel/assets/nostalgiksu-banner"
 cmp -s "$audit_dir/banner" "$expected_banner" || {
   echo "::error::$zip_name does not contain the canonical NostalgiKSU flashing banner"
   exit 1
