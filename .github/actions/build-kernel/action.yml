@@ -1037,6 +1037,9 @@ runs:
         git -C FinaSU checkout --detach FETCH_HEAD
         [ "$(git -C FinaSU rev-parse HEAD)" = "$FINASU_REF" ]
         grep -qF 'KSU_LSM_HOOK_INIT(inode_setxattr' FinaSU/kernel/feature/selinux_hide.c
+        patch -d FinaSU -p1 --forward < "$GITHUB_ACTION_PATH/patches/finasu-pr82-complete-inode-setxattr.patch"
+        grep -qF 'ksu_selinux_superblock_init' FinaSU/kernel/selinux/inode.c
+        ! grep -qF 'extern bool ksu_selinux_hide_enabled' FinaSU/kernel/feature/selinux_hide.h
         FINASU_DIR="$KERNEL_PLATFORM_FOLDER/FinaSU" sh FinaSU/kernel/setup.sh --dir "$KERNEL_PLATFORM_FOLDER/FinaSU"
 
         cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<'EOF'

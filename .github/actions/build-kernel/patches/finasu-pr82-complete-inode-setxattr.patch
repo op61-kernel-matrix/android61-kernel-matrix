@@ -1,0 +1,98 @@
+diff --git a/kernel/feature/selinux_hide.h b/kernel/feature/selinux_hide.h
+index 30c53f0..1b28d52 100644
+--- a/kernel/feature/selinux_hide.h
++++ b/kernel/feature/selinux_hide.h
+@@ -3,14 +3,6 @@
+ 
+ #include <linux/types.h>
+ 
+-struct file;
+-
+-extern bool ksu_selinux_hide_enabled;
+-extern bool ksu_selinux_hide_running;
+-
+-ssize_t my_write_context(struct file *file, char *buf, size_t size);
+-ssize_t my_write_access(struct file *file, char *buf, size_t size);
+-
+ void ksu_selinux_hide_init();
+ void ksu_selinux_hide_exit();
+ void ksu_selinux_hide_drop_backup_if_unused();
+diff --git a/kernel/selinux/inode.c b/kernel/selinux/inode.c
+index d4d3129..1aa11cc 100644
+--- a/kernel/selinux/inode.c
++++ b/kernel/selinux/inode.c
+@@ -39,6 +39,28 @@ fail:
+     pr_err("vmlinux BTF (%d) unreadable!\n", ret);
+     return ret;
+ }
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
++static u32 superblock_blob_offset;
++
++int ksu_selinux_superblock_init(void)
++{
++    struct ksu_btf_field field;
++    s32 offset;
++    int ret;
++
++    ret = ksu_btf_field("lsm_blob_sizes", "lbs_superblock", BTF_KIND_INT, sizeof(int), &field);
++    if (ret)
++        return ret;
++    ret = copy_from_kernel_nofault(&offset, (const char *)&selinux_blob_sizes + field.offset, sizeof(offset));
++    if (ret)
++        return ret;
++    if (offset < 0 || offset % __alignof__(struct superblock_security_struct))
++        return -EINVAL;
++    superblock_blob_offset = offset;
++    return 0;
++}
++#endif
+ #endif
+ 
+ struct inode_security_struct *ksu_selinux_inode(const struct inode *inode)
+@@ -58,3 +80,14 @@ struct inode_security_struct *ksu_selinux_inode(const struct inode *inode)
+     return selinux_inode(inode);
+ #endif
+ }
++
++struct superblock_security_struct *ksu_selinux_superblock(const struct super_block *sb)
++{
++#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 13, 0)
++    return sb->s_security;
++#elif defined(MODULE) && defined(CONFIG_DEBUG_INFO_BTF)
++    return (void *)((char *)sb->s_security + superblock_blob_offset);
++#else
++    return selinux_superblock(sb);
++#endif
++}
+diff --git a/kernel/selinux/selinux.h b/kernel/selinux/selinux.h
+index b1918a4..3aa6a3f 100644
+--- a/kernel/selinux/selinux.h
++++ b/kernel/selinux/selinux.h
+@@ -44,6 +44,10 @@ struct inode;
+ struct inode_security_struct;
+ struct inode_security_struct *ksu_selinux_inode(const struct inode *inode);
+ 
++struct super_block;
++struct superblock_security_struct;
++struct superblock_security_struct *ksu_selinux_superblock(const struct super_block *sb);
++
+ #if defined(MODULE) && defined(CONFIG_DEBUG_INFO_BTF)
+ int __init ksu_selinux_inode_init(void);
+ #else
+@@ -53,6 +57,15 @@ static inline int ksu_selinux_inode_init(void)
+ }
+ #endif
+ 
++#if defined(MODULE) && defined(CONFIG_DEBUG_INFO_BTF) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
++int ksu_selinux_superblock_init(void);
++#else
++static inline int ksu_selinux_superblock_init(void)
++{
++    return 0;
++}
++#endif
++
+ extern u32 ksu_file_sid;
+ 
+ #ifdef CONFIG_KSU_SUSFS
