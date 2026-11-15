@@ -35,10 +35,6 @@ inputs:
     description: 'Enable the isolated experimental gaming latency profile and its strict safety gates'
     required: false
     default: false
-  preserve_device_release:
-    description: 'Keep the device config uname suffix for vendor-module compatibility while retaining the gaming profile'
-    required: false
-    default: false
   clean:
     description: 'Force clean build without ccache acceleration'
     required: false
@@ -2449,9 +2445,7 @@ runs:
         # Keep the exact stock-shaped release string so OnePlus vendor modules
         # retain their expected vermagic/KMI contract. NostalgiKSU identity is
         # reported through its own ABI, never by mutating kernel.release.
-        if [ "${{ inputs.preserve_device_release }}" = "true" ]; then
-          CUSTOM_LOCALVERSION="-${ANDROID_VER}-${OP_UNAME}"
-        elif [ "${{ inputs.gaming_profile }}" = "true" ]; then
+        if [ "${{ inputs.gaming_profile }}" = "true" ]; then
           CUSTOM_LOCALVERSION="-${ANDROID_VER}-NOSTALGIC-GAMING"
         elif [[ "$OP_UNAME" =~ ^[0-9]+-g[0-9a-f]+(-ab[0-9]+)?$ ]]; then
           CUSTOM_LOCALVERSION="-${ANDROID_VER}-${OP_UNAME}"
@@ -2884,13 +2878,7 @@ runs:
         if [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; then
           # Gaming builds have one explicit lab identity regardless of the
           # source config's stock or compatibility uname placeholder.
-          if [ "${{ inputs.preserve_device_release }}" = "true" ]; then
-            grep -Fq "Linux version ${OP_KERNEL_VERSION}." <<<"$KERNEL_UNAME" &&
-              grep -Fq -- "-${OP_ANDROID_VERSION}-${OP_UNAME}" <<<"$KERNEL_UNAME" || {
-              echo "::error::Unexpected device-compatible kernel uname: $KERNEL_UNAME"
-              exit 1
-            }
-          elif [ "${{ inputs.gaming_profile }}" = "true" ]; then
+          if [ "${{ inputs.gaming_profile }}" = "true" ]; then
             grep -Fq "Linux version ${OP_KERNEL_VERSION}." <<<"$KERNEL_UNAME" &&
               grep -Fq -- "-${OP_ANDROID_VERSION}-NOSTALGIC-GAMING" <<<"$KERNEL_UNAME" || {
               echo "::error::Unexpected NOSTALGIC-GAMING kernel uname: $KERNEL_UNAME"

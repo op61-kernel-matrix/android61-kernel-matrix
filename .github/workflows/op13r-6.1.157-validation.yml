@@ -1,4 +1,4 @@
-name: Rebuild OP13R 6.1.157 NostalgiKSU Gaming
+name: Validate OP13R 6.1.157 NostalgiKSU
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   validate:
-    name: OP13R 6.1.157 · NostalgiKSU Gaming 33198 · SuSFS 2.4.0
+    name: OP13R 6.1.157 · NostalgiKSU 33197 · SuSFS 2.4.0
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -53,15 +53,13 @@ jobs:
 
       - name: Build and enforce all capabilities
         id: build
-        uses: ./.github/actions/build-gaming-kernel
+        uses: ./.github/actions/build-kernel
         with:
           op_config_json: ${{ steps.config.outputs.json }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           ksu_type: NostalgiKSU
           susfs_commit_hash_or_branch: ${{ steps.config.outputs.pin }}
           optimize_level: O2
-          gaming_profile: true
-          preserve_device_release: true
           clean: true
           debug: true
 
@@ -75,9 +73,8 @@ jobs:
         run: |
           set -euo pipefail
           [ "$KERNEL_VERSION" = "android14-6.1.157" ]
-          [ "$KSU_VERSION" = "33198-6" ]
+          [ "$KSU_VERSION" = "33197-6" ]
           [ "$SUSFS_VERSION" = "v2.4.0" ]
           zip_path=$(find . -type f -name "$ZIP_NAME" -print -quit)
           test -n "$zip_path"
-          bash .github/scripts/audit-nostalgic-gaming-ak3.sh \
-            "$zip_path" 'OP13r-6.1.157' 'android14-6.1.157' 'v2.4.0'
+          bash .github/scripts/audit-nostalgic-ak3.sh "$zip_path" 'OP13r-6.1.157'
