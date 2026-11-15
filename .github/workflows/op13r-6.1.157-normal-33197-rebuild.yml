@@ -52,7 +52,7 @@ jobs:
 
       - name: Build normal NostalgiKSU 33197
         id: build
-        uses: ./.github/actions/build-kernel
+        uses: ./.github/actions/build-kernel-33197
         with:
           op_config_json: ${{ steps.config.outputs.json }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
