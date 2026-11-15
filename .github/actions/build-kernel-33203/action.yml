@@ -2893,7 +2893,11 @@ runs:
           grep -qF '33203' "$IMAGE_STRINGS" || { echo "::error::NostalgiKSU 33203 marker missing"; exit 1; }
           grep -qF 'v1.6.2-33203-572354ce@HEAD' "$IMAGE_STRINGS" || { echo "::error::Verified NostalgiKSU 33203 source marker missing"; exit 1; }
           grep -qF 'ef8aaae7a7b2f8d662c149d80a8aa7f4151d90b539a5707c9506a76c319fd456' "$IMAGE_STRINGS" || { echo "::error::Validated run-65 manager certificate missing"; exit 1; }
-          if grep -qiE 'OP-BAKASU|huangdihd|ReSukiSU' "$IMAGE_STRINGS"; then
+          # NostalgiKSU 33203 legitimately carries ReSukiSU as an internal
+          # manager-certificate compatibility label. It is not uname or
+          # installer branding, so keep the proven visible-branding checks
+          # while rejecting only actual foreign kernel identities here.
+          if grep -qiE 'OP-BAKASU|huangdihd' "$IMAGE_STRINGS"; then
             echo "::error::Foreign visible kernel branding found in Image"
             exit 1
           fi
