@@ -116,7 +116,7 @@ jobs:
             "$FIRST_MATRIX_CONFIG" >/dev/null
           grep -qF 'revision="7a7ae28e849b0f9b42b8b6fc26feebe1864bf7ac"' \
             manifests/a16/oneplus_13r_6.1.157_w.xml
-          grep -qF 'revision="a38d33feb96867ebd75e555f21e81c7b276b9b4f"' \
+          grep -qF 'revision="dda73f7205501c09f7d0f48fd5f6d7f4b2220ca7"' \
             manifests/a16/oneplus_13r_6.1.157_w.xml
           grep -qF 'revision="28b975ada54f8610ed531a6b57253aed10e7c87d"' \
             manifests/a16/oneplus_13r_6.1.157_w.xml
