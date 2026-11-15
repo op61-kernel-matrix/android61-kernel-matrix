@@ -1,0 +1,10 @@
+{
+  "project": "nostalgic/NostalgiKSU-FinaSU",
+  "branch": "ci",
+  "source_commit": "572354ce6363b653d7f7e8356e3af607d4426fc5",
+  "version": "v1.6.2",
+  "version_code": 33203,
+  "release_identity": "v1.6.2-572354ce@HEAD",
+  "release_run": 67,
+  "release_archive_sha256": "a733b7e4489f9ad70109f0a52771f9ddf3f2890be907520e0918c5a62d9b1322"
+}
