@@ -1,0 +1,88 @@
+name: FinaSU PR82 detection-fix physical pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge_physical_test:
+        description: I understand this builds one OP13R pilot only; no matrix jobs will start
+        required: true
+        type: boolean
+        default: false
+      debug:
+        description: Upload diagnostic build artifacts
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finasu-pr82-op13r-pilot-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PILOT_CONFIG: configs/a16/OP13r-6.1.141.json
+  PIN_MANIFEST: configs/finasu-pr82-susfs-2.4.0-pins.json
+
+jobs:
+  pilot:
+    name: PILOT ONLY · OP13R 6.1.141 · FinaSU PR82
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Validate immutable cross-family plan
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ inputs.acknowledge_physical_test }}" = true ]
+          jq -e '.finasu_ref == "1765b3768c25d53cc02c9d8663f003c40571c993" and
+                 .finasu_source_version == 33205 and .susfs_version == "2.4.0" and
+                 (.families | length) == 5 and
+                 (.families[] | test("^[0-9a-f]{40}$"))' "$PIN_MANIFEST" >/dev/null
+          jq -e '.model == "OP13r-6.1.141" and .android_version == "android14" and .kernel_version == "6.1"' "$PILOT_CONFIG" >/dev/null
+          echo "finasu_ref=$(jq -r .finasu_ref "$PIN_MANIFEST")" >> "$GITHUB_OUTPUT"
+          echo "susfs_ref=$(jq -r '.families["android14-6.1"]' "$PIN_MANIFEST")" >> "$GITHUB_OUTPUT"
+          echo 'This workflow intentionally has no matrix job. A separate dispatch is required after physical boot confirmation.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git curl ca-certificates build-essential clang lld flex bison libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool libxml2-utils rsync unzip dwarves file python3 ccache jq bc dos2unix kmod libdw-dev elfutils pigz
+
+      - name: Load pilot configuration
+        id: config
+        shell: bash
+        run: |
+          JSON=$(jq -c --arg commit '${{ steps.plan.outputs.susfs_ref }}' '.susfs=true | .susfs_version="2.4.0" | .susfs_family="android14-6.1" | .susfs_commit=$commit' "$PILOT_CONFIG")
+          echo "json=$JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Build FinaSU detection-fix pilot
+        id: build
+        uses: ./.github/actions/build-kernel
+        with:
+          op_config_json: ${{ steps.config.outputs.json }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          ksu_type: FinaSU
+          ksu_branch_or_hash: ${{ steps.plan.outputs.finasu_ref }}
+          susfs_commit_hash_or_branch: ${{ steps.plan.outputs.susfs_ref }}
+          optimize_level: O2
+          clean: false
+          debug: ${{ inputs.debug }}
+
+      - name: Record physical-test requirement
+        shell: bash
+        env:
+          ZIP_NAME: ${{ steps.build.outputs.zip_name }}
+        run: |
+          set -euo pipefail
+          test -n "$ZIP_NAME"
+          [[ "$ZIP_NAME" == *FinaSU_33205-pr82_SuSFS_v2.4.0.zip ]]
+          echo "Pilot artifact: \`$ZIP_NAME\`. Do not enable the 169-target build until boot and Duck Detector results are reported." >> "$GITHUB_STEP_SUMMARY"

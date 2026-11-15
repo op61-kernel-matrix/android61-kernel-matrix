@@ -1,0 +1,143 @@
+name: FinaSU PR82 full 169-target matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      pilot_boot_confirmed:
+        description: I physically booted the FinaSU PR82 OP13R pilot successfully
+        required: true
+        type: boolean
+        default: false
+      debug:
+        description: Upload diagnostic build artifacts
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finasu-pr82-full-169-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PIN_MANIFEST: configs/finasu-pr82-susfs-2.4.0-pins.json
+
+jobs:
+  prepare:
+    name: Require physical pilot and prepare exact 169 targets
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      finasu_ref: ${{ steps.plan.outputs.finasu_ref }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Validate pilot gate, source pins and catalog
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ inputs.pilot_boot_confirmed }}" = true ] || {
+            echo '::error::Run and physically boot the pilot first. The 169 jobs are intentionally blocked.'
+            exit 1
+          }
+          jq -e '.finasu_ref == "1765b3768c25d53cc02c9d8663f003c40571c993" and
+                 .finasu_source_version == 33205 and .susfs_version == "2.4.0" and
+                 (.families | length) == 5 and
+                 (.families[] | test("^[0-9a-f]{40}$"))' "$PIN_MANIFEST" >/dev/null
+
+          mapfile -t files < <(find configs/a14 configs/a15 configs/a16 -type f -name '*.json' -print | sort)
+          [ "${#files[@]}" -eq 169 ]
+          plan=$(mktemp)
+          : > "$plan"
+          sequence=0
+          declare -A counts=()
+          for config in "${files[@]}"; do
+            android=$(jq -er .android_version "$config")
+            kernel=$(jq -er .kernel_version "$config")
+            model=$(jq -er .model "$config")
+            family="${android}-${kernel}"
+            case "$family" in
+              android12-5.10|android13-5.15|android14-6.1|android15-6.6|android16-6.12) ;;
+              *) echo "::error::Unsupported family $family in $config"; exit 1 ;;
+            esac
+            susfs_ref=$(jq -er --arg family "$family" '.families[$family]' "$PIN_MANIFEST")
+            counts[$family]=$(( ${counts[$family]:-0} + 1 ))
+            sequence=$((sequence + 1))
+            jq -nc --arg config "$config" --arg model "$model" --arg family "$family" \
+              --arg susfs_ref "$susfs_ref" --argjson sequence "$sequence" \
+              '{config:$config,model:$model,family:$family,susfs_ref:$susfs_ref,sequence:$sequence}' >> "$plan"
+          done
+          [ "${counts[android12-5.10]}" -eq 38 ]
+          [ "${counts[android13-5.15]}" -eq 29 ]
+          [ "${counts[android14-6.1]}" -eq 59 ]
+          [ "${counts[android15-6.6]}" -eq 35 ]
+          [ "${counts[android16-6.12]}" -eq 8 ]
+          echo "matrix=$(jq -sc '{include:.}' "$plan" | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "finasu_ref=$(jq -r .finasu_ref "$PIN_MANIFEST")" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: "${{ matrix.sequence }}/169 · ${{ matrix.family }} · ${{ matrix.model }}"
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git curl ca-certificates build-essential clang lld flex bison libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool libxml2-utils rsync unzip dwarves file python3 ccache jq bc dos2unix kmod libdw-dev elfutils pigz
+
+      - name: Load reviewed target
+        id: config
+        shell: bash
+        env:
+          CONFIG_PATH: ${{ matrix.config }}
+          FAMILY: ${{ matrix.family }}
+          SUSFS_REF: ${{ matrix.susfs_ref }}
+        run: |
+          set -euo pipefail
+          JSON=$(jq -c --arg family "$FAMILY" --arg commit "$SUSFS_REF" '.susfs=true | .susfs_version="2.4.0" | .susfs_family=$family | .susfs_commit=$commit' "$CONFIG_PATH")
+          actual_family=$(jq -r '.android_version + "-" + .kernel_version' <<<"$JSON")
+          [ "$actual_family" = "$FAMILY" ]
+          echo "json=$JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Build and audit FinaSU target
+        uses: ./.github/actions/build-kernel
+        with:
+          op_config_json: ${{ steps.config.outputs.json }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          ksu_type: FinaSU
+          ksu_branch_or_hash: ${{ needs.prepare.outputs.finasu_ref }}
+          susfs_commit_hash_or_branch: ${{ matrix.susfs_ref }}
+          optimize_level: O2
+          clean: false
+          debug: ${{ inputs.debug }}
+
+  complete:
+    name: Confirm all 169 FinaSU targets passed
+    if: always()
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - shell: bash
+        env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          [ "$PREPARE_RESULT" = success ]
+          [ "$BUILD_RESULT" = success ]
+          echo 'All 169 FinaSU PR82 targets passed their build and embedded security audits.' >> "$GITHUB_STEP_SUMMARY"

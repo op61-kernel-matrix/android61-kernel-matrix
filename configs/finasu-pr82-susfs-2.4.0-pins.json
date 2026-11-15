@@ -1,0 +1,15 @@
+{
+  "finasu_repository": "https://github.com/LyraVoid/FinaSU.git",
+  "finasu_ref": "1765b3768c25d53cc02c9d8663f003c40571c993",
+  "finasu_source_version": 33205,
+  "upstream_fix": "https://github.com/tiann/KernelSU/pull/3996",
+  "susfs_version": "2.4.0",
+  "susfs_repository": "https://gitlab.com/simonpunk/susfs4ksu.git",
+  "families": {
+    "android12-5.10": "784ac9e6fd49bb02499b5b60c57ccc9d0c680204",
+    "android13-5.15": "c1d1da42b74771944207ec45aaceff9c57e84985",
+    "android14-6.1": "f76b81f2a6bf98e4029cc0c823c054edbec29803",
+    "android15-6.6": "f98f08223bbf469cc0a1542166383d253557fc32",
+    "android16-6.12": "9b0b13f069673b9b07b713a5c66977de4d62b175"
+  }
+}
