@@ -1165,7 +1165,13 @@ runs:
           [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$1" ]
         }
         
-        if version_lte "${susfs_version:1}" "1.5.12"; then
+        # The coordinated OP13R 16.0.10.600 / 6.1.157 source does not carry
+        # KernelSU direct hook sites. SuSFS 2.4.0 still needs the proven manual
+        # hook patch before NostalgiKSU's inline verifier runs.
+        if version_lte "${susfs_version:1}" "1.5.12" || \
+           { [ "$OP_MODEL" = "OP13r-6.1.157" ] && \
+             [ "$susfs_version" = "v2.4.0" ] && \
+             [ "${{ inputs.ksu_type }}" = "NostalgiKSU" ]; }; then
           echo "NEED_HOOKS=true" >> $GITHUB_ENV
         else
           echo "NEED_HOOKS=false" >> $GITHUB_ENV
